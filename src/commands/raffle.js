@@ -1,0 +1,289 @@
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { getDb } = require('../db/database');
+const { isModerator } = require('../services/permissions');
+const { getPaginatedData, buildPagePayload } = require('../services/pagination');
+const { audit } = require('../services/audit');
+
+const DEFAULT_TICKET_GP = 150_000;
+
+function ticketLine(gp = DEFAULT_TICKET_GP) {
+  const n = Number(gp);
+  if (!Number.isFinite(n) || n <= 0) return 'Free entry. Linked RSN required.';
+  return `Tickets are **${n.toLocaleString()}** GP each, paid in game. Settle the gold with staff, then tap Enter.`;
+}
+
+module.exports = {
+  DEFAULT_TICKET_GP,
+  ticketLine,
+  data: new SlashCommandBuilder()
+    .setName('raffle')
+    .setDescription('Manage clan raffles')
+    .addSubcommand(sub =>
+      sub.setName('create')
+        .setDescription('Create a new raffle with a button for entries')
+        .addStringOption(opt => opt.setName('title').setDescription('Raffle title').setRequired(true))
+        .addStringOption(opt => opt.setName('description').setDescription('What are you raffling?').setRequired(false))
+        .addIntegerOption(opt =>
+          opt.setName('ticket_gp')
+            .setDescription('In-game gold per ticket (default 150000)')
+            .setMinValue(0)
+            .setMaxValue(2_147_000_000))
+        .addStringOption(opt =>
+          opt.setName('weight_mode')
+            .setDescription('Weight entries by activity (default: none)')
+            .setRequired(false)
+            .addChoices(
+              { name: 'None (equal chance)', value: 'none' },
+              { name: 'SOTW wins', value: 'sotw' },
+              { name: 'Event attendance (this server)', value: 'attendance' },
+              { name: 'Combined (wins + attendance)', value: 'activity' },
+            )))
+    .addSubcommand(sub =>
+      sub.setName('entries')
+        .setDescription('Show how many entries a raffle has')
+        .addIntegerOption(opt => opt.setName('id').setDescription('Which raffle').setRequired(true).setAutocomplete(true)))
+    .addSubcommand(sub =>
+      sub.setName('draw')
+        .setDescription('Draw a random winner from the entries')
+        .addIntegerOption(opt => opt.setName('id').setDescription('Which raffle').setRequired(true).setAutocomplete(true)))
+    .addSubcommand(sub =>
+      sub.setName('list')
+        .setDescription('List all raffles in this server'))
+    .addSubcommand(sub =>
+      sub.setName('history')
+        .setDescription('Show raffle win history and stats')
+        .addUserOption(opt => opt.setName('user').setDescription('Show stats for a specific user').setRequired(false))),
+
+  async execute(interaction) {
+    const sub = interaction.options.getSubcommand();
+    const db = getDb();
+
+    if (['create', 'draw'].includes(sub) && !isModerator(interaction.member)) {
+      return interaction.reply({ content: '❌ You need **Manage Events**, **Manage Server**, or **Administrator** permission to create raffles or draw winners.', flags: 64 });
+    }
+
+    if (sub === 'create') {
+      const title = interaction.options.getString('title');
+      const description = interaction.options.getString('description') || 'Click the button below to enter!';
+      const weightMode = interaction.options.getString('weight_mode') || 'none';
+      const ticketGp = interaction.options.getInteger('ticket_gp') ?? DEFAULT_TICKET_GP;
+
+      const result = db.prepare(`
+        INSERT INTO raffles (guild_id, title, description, channel_id, created_by, weight_mode, ticket_gp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(interaction.guildId, title, description, interaction.channelId, interaction.user.id, weightMode, ticketGp);
+
+      const raffleId = result.lastInsertRowid;
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`raffle_enter_${raffleId}`)
+          .setLabel('Enter Raffle')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('🎟️')
+      );
+
+      const theme = require('../services/theme');
+      const economy = require('../services/economy');
+      await interaction.reply({
+        embeds: [theme.embed('raffle', {
+          title: title,
+          description: [
+            description !== 'Click the button below to enter!' ? description : theme.line('raffleOpen', raffleId),
+            ticketLine(ticketGp),
+            weightMode !== 'none' ? `Odds weighted by ${weightMode}.` : 'Equal odds after you have a ticket. Linked RSN required — `/member link` first.',
+            `#${raffleId}`,
+          ].join('\n\n'),
+          fields: [
+            theme.field('Ticket', ticketGp > 0 ? `${ticketGp.toLocaleString()} GP` : 'Free', true),
+            theme.field('Credits', economy.payNote('raffle_enter', 'raffle_win')),
+          ],
+        })],
+        components: [row],
+      });
+      await audit(interaction.client, interaction.guildId, `Raffle #${raffleId} **${title}** created by <@${interaction.user.id}>`);
+      return;
+    }
+
+    if (sub === 'entries') {
+      const id = interaction.options.getInteger('id');
+      const raffle = db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+
+      if (!raffle) {
+        return interaction.reply({ content: `❌ Raffle #${id} not found.`, flags: 64 });
+      }
+
+      const count = db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
+
+      await interaction.reply(`🎟️ **${raffle.title}** has **${count.count}** entr${count.count === 1 ? 'y' : 'ies'}.${raffle.drawn ? ' (Already drawn)' : ''}`);
+      return;
+    }
+
+    if (sub === 'draw') {
+      const id = interaction.options.getInteger('id');
+      const raffle = db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+
+      if (!raffle) {
+        return interaction.reply({ content: `❌ Raffle #${id} not found.`, flags: 64 });
+      }
+
+      if (raffle.drawn) {
+        return interaction.reply({ content: `❌ Raffle #${id} has already been drawn. Winner: <@${raffle.winner_id}>`, flags: 64 });
+      }
+
+      const entries = db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(id);
+
+      if (entries.length === 0) {
+        return interaction.reply({ content: `❌ Raffle #${id} has no entries yet.`, flags: 64 });
+      }
+
+      let winner;
+      let weightInfo = '';
+
+      if (raffle.weight_mode && raffle.weight_mode !== 'none') {
+        const weights = entries.map(entry => {
+          let weight = 1;
+          let reason = 'base';
+
+          if (raffle.weight_mode === 'sotw' || raffle.weight_mode === 'activity') {
+            const sotwCount = db.prepare(`
+              SELECT COUNT(*) as count FROM sotw_winners
+              WHERE guild_id = ? AND winner_rsn IN (
+                SELECT rsn FROM members WHERE guild_id = ? AND user_id = ?
+              )
+            `).get(interaction.guildId, interaction.guildId, entry.user_id);
+            const sotwWins = sotwCount?.count || 0;
+            weight += Math.min(sotwWins, 5);
+            if (sotwWins > 0) reason = `${sotwWins} SOTW wins`;
+          }
+
+          if (raffle.weight_mode === 'attendance' || raffle.weight_mode === 'activity') {
+            const attendanceCount = db.prepare(`
+              SELECT COUNT(*) as count
+              FROM event_attendance ea
+              JOIN events e ON e.id = ea.event_id
+              WHERE ea.user_id = ? AND ea.status = ? AND e.guild_id = ?
+            `).get(entry.user_id, 'yes', interaction.guildId);
+            const attParticipation = attendanceCount?.count || 0;
+            weight += Math.min(attParticipation, 5);
+            if (attParticipation > 0) reason += (reason !== 'base' ? ', ' : '') + `${attParticipation} events attended`;
+          }
+
+          return { ...entry, weight: Math.min(weight, 10), reason };
+        });
+
+        const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+        let random = Math.random() * totalWeight;
+        for (const w of weights) {
+          random -= w.weight;
+          if (random <= 0) {
+            winner = w;
+            break;
+          }
+        }
+        if (!winner) winner = weights[0];
+
+        weightInfo = `\n📊 Weighted by **${raffle.weight_mode}** — winner had weight ${winner.weight} (${winner.reason}) out of ${totalWeight} total`;
+      } else {
+        winner = entries[Math.floor(Math.random() * entries.length)];
+      }
+
+      db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ?').run(winner.user_id, id);
+      require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win');
+
+      const theme = require('../services/theme');
+      await interaction.reply({
+        embeds: [theme.embed('raffle', {
+          title: raffle.title,
+          description: [
+            theme.line('raffleWon', raffle.id),
+            `<@${winner.user_id}> · ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`,
+            weightInfo.trim(),
+          ].filter(Boolean).join('\n'),
+        })],
+      });
+      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${winner.user_id}>`);
+      return;
+    }
+
+    if (sub === 'list') {
+      const data = await getPaginatedData('raffles', interaction.guildId, 0);
+      if (!data || data.total === 0) {
+        return interaction.reply('No raffles yet. Create one with `/raffle create`!');
+      }
+      await interaction.reply(buildPagePayload('raffles', data, 0, interaction.guildId));
+      return;
+    }
+
+    if (sub === 'history') {
+      const targetUser = interaction.options.getUser('user');
+
+      if (targetUser) {
+        const wins = db.prepare(`
+          SELECT * FROM raffles WHERE guild_id = ? AND winner_id = ? AND drawn = 1
+          ORDER BY created_at DESC
+        `).all(interaction.guildId, targetUser.id);
+
+        const entries = db.prepare(`
+          SELECT COUNT(*) as count FROM raffle_entries re
+          JOIN raffles r ON r.id = re.raffle_id
+          WHERE r.guild_id = ? AND re.user_id = ?
+        `).get(interaction.guildId, targetUser.id);
+
+        const winRate = entries.count > 0
+          ? ((wins.length / entries.count) * 100).toFixed(1)
+          : '0.0';
+
+        let response = `🎟️ **Raffle Stats for <@${targetUser.id}>**\n\n`;
+        response += `🏆 Wins: **${wins.length}**\n`;
+        response += `🎫 Entries: **${entries.count}**\n`;
+        response += `📊 Win Rate: **${winRate}%**\n`;
+
+        if (wins.length > 0) {
+          response += `\n**Wins:**\n`;
+          response += wins.map(w => `• **${w.title}** — <t:${Math.floor(new Date(w.created_at).getTime() / 1000)}:d>`).join('\n');
+        }
+
+        await interaction.reply(response);
+      } else {
+        const leaderboard = db.prepare(`
+          SELECT winner_id, COUNT(*) as wins
+          FROM raffles
+          WHERE guild_id = ? AND drawn = 1
+          GROUP BY winner_id
+          ORDER BY wins DESC
+          LIMIT 20
+        `).all(interaction.guildId);
+
+        if (leaderboard.length === 0) {
+          return interaction.reply('No raffle winners yet. Draw some!');
+        }
+
+        const medals = ['🥇', '🥈', '🥉'];
+        const list = leaderboard.map((row, i) => {
+          const medal = medals[i] || `${i + 1}.`;
+          return `${medal} <@${row.winner_id}> — **${row.wins} win${row.wins === 1 ? '' : 's'}**`;
+        }).join('\n');
+
+        await interaction.reply(`🎟️ **Raffle Champions:**\n\n${list}`);
+      }
+    }
+  },
+  staffSubs: ['create', 'draw'],
+
+  async autocomplete(interaction) {
+    const { getDb } = require('../db/database');
+    const { filterChoices, respond } = require('../services/autocomplete');
+    const db = getDb();
+    const sub = interaction.options.getSubcommand();
+    const rows = sub === 'draw'
+      ? db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC LIMIT 25').all(interaction.guildId)
+      : db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? ORDER BY id DESC LIMIT 25').all(interaction.guildId);
+
+    const focused = interaction.options.getFocused(true);
+    await respond(interaction, filterChoices(rows, focused.value, r => ({
+      name: `#${r.id} · ${r.title}${r.drawn ? ' (drawn)' : ''}`,
+      value: r.id,
+    })));
+  },
+};

@@ -1,0 +1,29 @@
+{
+  "name": "osrs-clan-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for OSRS clan management — events, reminders, leaderboards, raffles, and SOTW via Wise Old Man API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "register": "node src/deploy-commands.js",
+    "init-db": "node src/db/init.js"
+  },
+  "keywords": [
+    "osrs",
+    "discord-bot",
+    "clan",
+    "wise-old-man",
+    "sotw",
+    "raffle"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "luxon": "^3.7.2"
+  }
+}
