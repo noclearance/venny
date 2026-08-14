@@ -65,6 +65,7 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
         userId: interaction.user.id,
         status: 'complete',
         verifiedBy: 'wom',
+        client: interaction.client,
       });
       await interaction.editReply({ content: `🟩 **${tile.label}** stamped from Wise Old Man.` });
       await syncPostedBoard(interaction, card);

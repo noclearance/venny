@@ -312,6 +312,7 @@ module.exports = {
           proof: interaction.options.getString('proof'),
           verifiedBy: interaction.user.id,
           status: 'complete',
+          client: interaction.client,
         });
         await interaction.reply({ content: `🟩 Stamped **${tile.label}** for ${target}.`, ...draft.livePayload(bingo.getBingo(interaction.guildId, card.id)) });
         await bingoUi.syncPostedBoard(interaction, card);

@@ -49,7 +49,7 @@ async function checkMember(client, guildId, member) {
     const now = currentValue(parsed, goal);
     if (now >= goal.target) {
       db.prepare('UPDATE xp_goals SET reached = 1, reached_at = datetime(\'now\') WHERE id = ?').run(goal.id);
-      award(guildId, member.user_id, 'goal');
+      award(guildId, member.user_id, 'goal', client);
       hit.push({ ...goal, now });
     }
   }

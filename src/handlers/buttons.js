@@ -42,7 +42,7 @@ async function handleRaffleEnter(interaction, db) {
 
   try {
     db.prepare('INSERT INTO raffle_entries (raffle_id, user_id) VALUES (?, ?)').run(raffleId, interaction.user.id);
-    require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter');
+    require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client);
     const { ticketLine } = require('../commands/raffle');
     const ticketNote = raffle.ticket_gp > 0 ? `\n${ticketLine(raffle.ticket_gp)}` : '';
     await interaction.reply({ content: `You're entered in **${raffle.title}** (${member.rsn}).${ticketNote}`, flags: 64 });
@@ -137,6 +137,7 @@ async function handleBingoReview(interaction, db) {
       teamId: team?.id,
       verifiedBy: interaction.user.id,
       status: 'complete',
+      client: interaction.client,
     });
     await interaction.update({ content: `🟩 Approved **${tile.label}** for <@${userId}>.`, components: [] });
     await require('../services/live').refreshKind(interaction.client, interaction.guildId, 'bingo', card.id);

@@ -204,7 +204,7 @@ module.exports = {
       }
 
       db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ?').run(winner.user_id, id);
-      require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win');
+      require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win', interaction.client);
 
       const theme = require('../services/theme');
       const drawMsg = await interaction.reply({

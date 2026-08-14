@@ -96,7 +96,7 @@ async function handleRsvp(interaction) {
 
   await updateEventMessage(interaction.client, event);
   if (status === 'yes' && prior?.status !== 'yes') {
-    require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp');
+    require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client);
   }
 
   await interaction.reply({ content: `${LABELS[status]} · **${event.title}**`, flags: 64 });

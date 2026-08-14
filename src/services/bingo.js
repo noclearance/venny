@@ -191,9 +191,9 @@ function saveMessage(bingoId, channelId, messageId) {
     .run(channelId, messageId, bingoId);
 }
 
-function claimTile({ card, tile, userId, proof, status = 'pending', verifiedBy = null }) {
+function claimTile({ card, tile, userId, proof, status = 'pending', verifiedBy = null, client }) {
   const team = teamOf(card.id, userId);
-  markComplete({ bingo: card, tile, userId, teamId: team?.id, proof, verifiedBy, status });
+  markComplete({ bingo: card, tile, userId, teamId: team?.id, proof, verifiedBy, status, client });
 }
 
 async function ensureBaseline(card, userId) {
@@ -301,7 +301,7 @@ async function snapshotBaselines(bingo, guildId) {
   }
 }
 
-function markComplete({ bingo, tile, userId, teamId, proof, verifiedBy, status = 'complete' }) {
+function markComplete({ bingo, tile, userId, teamId, proof, verifiedBy, status = 'complete', client }) {
   const db = getDb();
   const prior = db.prepare('SELECT status FROM bingo_progress WHERE bingo_id = ? AND tile_id = ? AND user_id = ?')
     .get(bingo.id, tile.id, userId);
@@ -315,7 +315,7 @@ function markComplete({ bingo, tile, userId, teamId, proof, verifiedBy, status =
       completed_at = excluded.completed_at,
       team_id = excluded.team_id
   `).run(bingo.id, tile.id, userId, teamId || null, status, proof || null, verifiedBy || null);
-  if (status === 'complete' && prior?.status !== 'complete') award(bingo.guild_id, userId, 'bingo_tile');
+  if (status === 'complete' && prior?.status !== 'complete') award(bingo.guild_id, userId, 'bingo_tile', client);
 }
 
 function metricValue(snap, tile) {
@@ -327,7 +327,7 @@ function metricValue(snap, tile) {
   return 0;
 }
 
-async function autoCheckMember(bingo, member) {
+async function autoCheckMember(bingo, member, client) {
   const db = getDb();
   const baseRow = db.prepare('SELECT snapshot_json FROM bingo_baselines WHERE bingo_id = ? AND user_id = ?').get(bingo.id, member.user_id);
   if (!baseRow) return [];
@@ -344,7 +344,7 @@ async function autoCheckMember(bingo, member) {
       : metricValue(current, tile) - metricValue(baseline, tile);
     const ok = tile.verify_mode === 'wom_level' ? gained >= (tile.amount || 99) : gained >= (tile.amount || 1);
     if (ok) {
-      markComplete({ bingo, tile, userId: member.user_id, teamId: team?.id, verifiedBy: 'wom', status: 'complete' });
+      markComplete({ bingo, tile, userId: member.user_id, teamId: team?.id, verifiedBy: 'wom', status: 'complete', client });
       completed.push(tile);
     }
   }

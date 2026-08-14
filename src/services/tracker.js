@@ -14,7 +14,7 @@ async function tickTracker(client) {
     const member = members[cursor % members.length];
     cursor += 1;
     try {
-      const { fresh } = await achievements.scanMember(member.guild_id, member);
+      const { fresh } = await achievements.scanMember(member.guild_id, member, client);
       await achievements.announce(client, member.guild_id, fresh, member.user_id);
     } catch (err) {
       console.error(`Achievement scan ${member.rsn}:`, err.message);
@@ -28,7 +28,7 @@ async function tickTracker(client) {
     const card = bingo.activeBingo(member.guild_id);
     if (card && card.status === 'active') {
       try {
-        const done = await bingo.autoCheckMember(card, member);
+        const done = await bingo.autoCheckMember(card, member, client);
         if (done.length) {
           const settings = db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(member.guild_id);
           const channelId = card.channel_id || settings?.announce_channel || settings?.reminder_channel;

@@ -4,39 +4,39 @@ const { loadPlayer } = require('../osrs/snapshot');
 const { prettyMetric, KC_MILESTONES, CLOG_MILESTONES, XP_FOR_120 } = require('../osrs/catalog');
 const { award } = require('./economy');
 
-function record(guildId, userId, rsn, key, title, kind) {
+function record(guildId, userId, rsn, key, title, kind, client) {
   const db = getDb();
   const result = db.prepare(`
     INSERT OR IGNORE INTO achievements (guild_id, user_id, rsn, key, title, kind, announced)
     VALUES (?, ?, ?, ?, ?, ?, 0)
   `).run(guildId, userId, rsn, key, title, kind);
   if (result.changes > 0) {
-    award(guildId, userId, 'achievement');
+    award(guildId, userId, 'achievement', client);
     return { key, title, kind, fresh: true };
   }
   return null;
 }
 
-function detectFromSnapshot(guildId, userId, rsn, parsed) {
+function detectFromSnapshot(guildId, userId, rsn, parsed, client) {
   const found = [];
   for (const skill of parsed.skillList) {
     if (skill.level >= 99) {
-      const hit = record(guildId, userId, rsn, `99:${skill.name}`, `99 ${prettyMetric(skill.name)}`, '99');
+      const hit = record(guildId, userId, rsn, `99:${skill.name}`, `99 ${prettyMetric(skill.name)}`, '99', client);
       if (hit) found.push(hit);
     }
     if (skill.experience >= XP_FOR_120) {
-      const hit = record(guildId, userId, rsn, `120:${skill.name}`, `Virtual 120 ${prettyMetric(skill.name)}`, '120');
+      const hit = record(guildId, userId, rsn, `120:${skill.name}`, `Virtual 120 ${prettyMetric(skill.name)}`, '120', client);
       if (hit) found.push(hit);
     }
   }
   if (parsed.maxed) {
-    const hit = record(guildId, userId, rsn, 'max', 'Max cape (all 99s)', 'cape');
+    const hit = record(guildId, userId, rsn, 'max', 'Max cape (all 99s)', 'cape', client);
     if (hit) found.push(hit);
   }
   if (parsed.collectionLog) {
     for (const mark of CLOG_MILESTONES) {
       if (parsed.collectionLog >= mark) {
-        const hit = record(guildId, userId, rsn, `clog:${mark}`, `${mark} collection log slots`, 'clog');
+        const hit = record(guildId, userId, rsn, `clog:${mark}`, `${mark} collection log slots`, 'clog', client);
         if (hit) found.push(hit);
       }
     }
@@ -44,7 +44,7 @@ function detectFromSnapshot(guildId, userId, rsn, parsed) {
   for (const boss of parsed.bossList) {
     for (const mark of KC_MILESTONES) {
       if (boss.kills >= mark) {
-        const hit = record(guildId, userId, rsn, `kc:${boss.name}:${mark}`, `${mark} ${prettyMetric(boss.name)} KC`, 'kc');
+        const hit = record(guildId, userId, rsn, `kc:${boss.name}:${mark}`, `${mark} ${prettyMetric(boss.name)} KC`, 'kc', client);
         if (hit) found.push(hit);
       }
     }
@@ -52,9 +52,9 @@ function detectFromSnapshot(guildId, userId, rsn, parsed) {
   return found;
 }
 
-async function scanMember(guildId, member) {
+async function scanMember(guildId, member, client) {
   const parsed = await loadPlayer(member.rsn, { refresh: true });
-  return { parsed, fresh: detectFromSnapshot(guildId, member.user_id, member.rsn, parsed) };
+  return { parsed, fresh: detectFromSnapshot(guildId, member.user_id, member.rsn, parsed, client) };
 }
 
 function recent(guildId, userId = null, limit = 15) {

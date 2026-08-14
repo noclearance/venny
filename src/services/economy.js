@@ -44,15 +44,43 @@ function getBalance(guildId, userId) {
   return row?.coins || 0;
 }
 
-function award(guildId, userId, reason, amount = REWARDS[reason] || 0) {
-  if (!guildId || !userId || !amount) return getBalance(guildId, userId);
+function asClient(value) {
+  return value && typeof value.users?.fetch === 'function' ? value : null;
+}
+
+async function tell(client, userId, amount, reason, balance) {
+  if (!client || !userId || !amount) return;
+  const why = REWARD_COPY[reason] || reason;
+  try {
+    const user = await client.users.fetch(userId);
+    if (!user || user.bot) return;
+    const theme = require('./theme');
+    await user.send({
+      embeds: [theme.embed('success', {
+        title: 'Credits',
+        description: `**+${amount}** for ${why}.\nNobody else sees this.`,
+        fields: [theme.field('Pouch', `**${balance.toLocaleString()}**`, true)],
+        footer: '/economy balance if you want the card',
+      })],
+    });
+  } catch {
+    // DMs closed or blocked — leave it
+  }
+}
+
+function award(guildId, userId, reason, amount, client) {
+  const maybeClient = asClient(amount) || asClient(client);
+  const n = asClient(amount) ? (REWARDS[reason] || 0) : (amount == null ? (REWARDS[reason] || 0) : amount);
+  if (!guildId || !userId || !n) return getBalance(guildId, userId);
   const db = getDb();
   db.prepare(`
     INSERT INTO economy_balances (guild_id, user_id, coins) VALUES (?, ?, ?)
     ON CONFLICT(guild_id, user_id) DO UPDATE SET coins = coins + excluded.coins
-  `).run(guildId, userId, amount);
-  db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, amount, reason);
-  return getBalance(guildId, userId);
+  `).run(guildId, userId, n);
+  db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
+  const balance = getBalance(guildId, userId);
+  if (maybeClient) tell(maybeClient, userId, n, reason, balance);
+  return balance;
 }
 
 function leaderboard(guildId, limit = 15) {
