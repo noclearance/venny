@@ -25,18 +25,24 @@ function findHook(token) {
 }
 
 function startServer(client) {
-  const port = Number(process.env.WEBHOOK_PORT || 0);
+  // Render Web Services set PORT and refuse to stay up unless something binds it.
+  const port = Number(process.env.PORT || process.env.WEBHOOK_PORT || 0);
   if (!port) {
     console.log('Webhook HTTP server off (set WEBHOOK_PORT to enable Twitch/RuneLite hooks).');
     return null;
   }
 
   const server = http.createServer(async (req, res) => {
-    if (req.method !== 'POST' || !req.url.startsWith('/hook/')) {
+    const url = (req.url || '/').split('?')[0];
+    if (req.method === 'GET' && (url === '/' || url === '/health')) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' }).end('venny ok');
+      return;
+    }
+    if (req.method !== 'POST' || !url.startsWith('/hook/')) {
       res.writeHead(404).end('not found');
       return;
     }
-    const token = req.url.slice('/hook/'.length).split('?')[0];
+    const token = url.slice('/hook/'.length);
     const hook = findHook(token);
     if (!hook) {
       res.writeHead(401).end('bad token');
