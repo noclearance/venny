@@ -146,7 +146,7 @@ module.exports = {
         return interaction.reply({ content: '❌ No active SOTW found. Start one with `/sotw start`.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       if (!sotw.wom_competition_id) {
         return interaction.editReply('This SOTW is not linked to a WOM competition. Cannot fetch live standings.');
@@ -212,7 +212,7 @@ module.exports = {
       const winners = db.prepare('SELECT * FROM sotw_winners WHERE guild_id = ? ORDER BY id DESC LIMIT 20').all(interaction.guildId);
 
       if (winners.length === 0) {
-        return interaction.reply('No SOTW history yet.');
+        return interaction.reply({ content: 'No SOTW history yet.', flags: 64 });
       }
 
       const theme = require('../services/theme');
@@ -227,6 +227,7 @@ module.exports = {
           description: list,
           thumbnail: theme.skillIconUrl(winners[0].skill),
         })],
+        flags: 64,
       });
       return;
     }
@@ -243,7 +244,7 @@ module.exports = {
       `).all(interaction.guildId);
 
       if (champions.length === 0) {
-        return interaction.reply('No SOTW champions yet. Start competing!');
+        return interaction.reply({ content: 'No SOTW champions yet. Start competing!', flags: 64 });
       }
 
       const theme = require('../services/theme');
@@ -253,6 +254,7 @@ module.exports = {
           description: theme.rankLines(champions, c => `**${c.winner_rsn}** — ${c.wins} win${c.wins === 1 ? '' : 's'}${c.total_xp ? ` · ${c.total_xp.toLocaleString()} XP` : ''}`),
           thumbnail: theme.skillIconUrl('overall'),
         })],
+        flags: 64,
       });
       return;
     }
@@ -275,7 +277,7 @@ module.exports = {
         return interaction.reply({ content: '❌ This SOTW is not linked to a WOM competition.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         const details = await wom.getCompetitionDetails(sotw.wom_competition_id);
@@ -356,7 +358,7 @@ module.exports = {
         return interaction.reply({ content: '❌ No WOM verification code configured. Set WOM_VERIFICATION_CODE in .env.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         await wom.updateOutdatedParticipants(sotw.wom_competition_id, settings.wom_verif_code);
@@ -392,10 +394,10 @@ module.exports = {
         // Check if there's an active SOTW
         const active = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(interaction.guildId);
         if (active) {
-          await interaction.reply(`📋 Added **${skill.toUpperCase()}** to the SOTW queue (ID: #${queueId}). It will auto-start when the current SOTW ends.`);
+          await interaction.reply({ content: `Added **${skill.toUpperCase()}** to the SOTW queue (ID: #${queueId}). It will auto-start when the current SOTW ends.`, flags: 64 });
         } else {
           // No active SOTW — start immediately
-          await interaction.deferReply();
+          await interaction.deferReply({ flags: 64 });
           const result = await sotwQueue.startNextQueuedSotw(interaction.guildId, interaction.client);
           if (result?.success) {
             await interaction.editReply(`📋 Added and auto-started **${skill.toUpperCase()}** (no active SOTW was running).`);
@@ -409,10 +411,10 @@ module.exports = {
       if (action === 'list') {
         const queue = sotwQueue.getQueue(interaction.guildId);
         if (queue.length === 0) {
-          return interaction.reply('SOTW queue is empty. Add skills with `/sotw queue action:add skill:<skill>`.');
+          return interaction.reply({ content: 'SOTW queue is empty. Add skills with `/sotw queue action:add skill:<skill>`.', flags: 64 });
         }
         const list = queue.map((q, i) => `${i + 1}. ${wom.getSkillEmoji(q.skill)} **${q.skill.toUpperCase()}** — ${q.duration_days} days (ID: #${q.id})`).join('\n');
-        await interaction.reply(`📋 **SOTW Queue:**\n\n${list}`);
+        await interaction.reply({ content: `**SOTW Queue:**\n\n${list}`, flags: 64 });
         return;
       }
 
@@ -423,7 +425,7 @@ module.exports = {
         }
         const removed = sotwQueue.removeFromQueue(queueId, interaction.guildId);
         if (removed) {
-          await interaction.reply(`✅ Removed item #${queueId} from the SOTW queue.`);
+          await interaction.reply({ content: `Removed item #${queueId} from the SOTW queue.`, flags: 64 });
         } else {
           await interaction.reply({ content: `❌ Queue item #${queueId} not found.`, flags: 64 });
         }
@@ -432,7 +434,7 @@ module.exports = {
 
       if (action === 'clear') {
         const count = sotwQueue.clearQueue(interaction.guildId);
-        await interaction.reply(`✅ Cleared ${count} item${count === 1 ? '' : 's'} from the SOTW queue.`);
+        await interaction.reply({ content: `Cleared ${count} item${count === 1 ? '' : 's'} from the SOTW queue.`, flags: 64 });
         return;
       }
     }

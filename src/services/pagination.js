@@ -119,7 +119,7 @@ function buildPagePayload(type, data, page, guildId) {
     description: data.formatter(data.items),
   });
   const components = data.totalPages > 1 ? [buildPaginationRow(type, page, data.totalPages, guildId)] : [];
-  return { embeds: [embed], components, content: null };
+  return { embeds: [embed], components, content: null, flags: 64 };
 }
 
 module.exports = { buildPaginationRow, getPaginatedData, buildPagePayload, ITEMS_PER_PAGE };

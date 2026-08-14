@@ -125,7 +125,7 @@ module.exports = {
     if (sub === 'list') {
       const data = await getPaginatedData('events', interaction.guildId, 0);
       if (!data || data.total === 0) {
-        return interaction.reply('No upcoming events. Create one with `/event create`!');
+        return interaction.reply({ content: 'No upcoming events. Create one with `/event create`!', flags: 64 });
       }
       await interaction.reply(buildPagePayload('events', data, 0, interaction.guildId));
       return;

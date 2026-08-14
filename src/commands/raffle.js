@@ -130,7 +130,7 @@ module.exports = {
 
       const count = db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
 
-      await interaction.reply(`🎟️ **${raffle.title}** has **${count.count}** entr${count.count === 1 ? 'y' : 'ies'}.${raffle.drawn ? ' (Already drawn)' : ''}`);
+      await interaction.reply({ content: `**${raffle.title}** has **${count.count}** entr${count.count === 1 ? 'y' : 'ies'}.${raffle.drawn ? ' (Already drawn)' : ''}`, flags: 64 });
       return;
     }
 
@@ -234,7 +234,7 @@ module.exports = {
     if (sub === 'list') {
       const data = await getPaginatedData('raffles', interaction.guildId, 0);
       if (!data || data.total === 0) {
-        return interaction.reply('No raffles yet. Create one with `/raffle create`!');
+        return interaction.reply({ content: 'No raffles yet. Create one with `/raffle create`!', flags: 64 });
       }
       await interaction.reply(buildPagePayload('raffles', data, 0, interaction.guildId));
       return;
@@ -269,7 +269,7 @@ module.exports = {
           response += wins.map(w => `• **${w.title}** — <t:${Math.floor(new Date(w.created_at).getTime() / 1000)}:d>`).join('\n');
         }
 
-        await interaction.reply(response);
+        await interaction.reply({ content: response, flags: 64 });
       } else {
         const leaderboard = db.prepare(`
           SELECT winner_id, COUNT(*) as wins
@@ -281,7 +281,7 @@ module.exports = {
         `).all(interaction.guildId);
 
         if (leaderboard.length === 0) {
-          return interaction.reply('No raffle winners yet. Draw some!');
+          return interaction.reply({ content: 'No raffle winners yet. Draw some!', flags: 64 });
         }
 
         const medals = ['🥇', '🥈', '🥉'];
@@ -290,7 +290,7 @@ module.exports = {
           return `${medal} <@${row.winner_id}> — **${row.wins} win${row.wins === 1 ? '' : 's'}**`;
         }).join('\n');
 
-        await interaction.reply(`🎟️ **Raffle Champions:**\n\n${list}`);
+        await interaction.reply({ content: `**Raffle Champions:**\n\n${list}`, flags: 64 });
       }
     }
   },

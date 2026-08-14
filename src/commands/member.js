@@ -112,7 +112,7 @@ module.exports = {
         return;
       }
 
-      await interaction.reply(`**${user.username}** is linked to RSN: **${member.rsn}**`);
+      await interaction.reply({ content: `**${user.username}** is linked to RSN: **${member.rsn}**`, flags: 64 });
       return;
     }
 

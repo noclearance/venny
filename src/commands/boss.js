@@ -67,6 +67,7 @@ module.exports = {
       const current = db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       if (!current) return interaction.reply({ content: 'No BOTW running. A mod can `/boss week boss:`.', flags: 64 });
       return interaction.reply({
+        flags: 64,
         embeds: [theme.embed('danger', {
           title: `BOTW · ${prettyMetric(current.boss)}`,
           description: `Ends ${theme.when(current.ends_at)}`,
@@ -83,7 +84,7 @@ module.exports = {
     }
 
     const period = interaction.options.getString('period') || 'current';
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: 64 });
     try {
       if (period === 'current') {
         const hiscores = await wom.getGroupHiscores(settings.wom_group_id, boss, 15);

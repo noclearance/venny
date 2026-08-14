@@ -27,6 +27,7 @@ module.exports = {
             economy.payRates('event_rsvp', 'raffle_enter', 'raffle_win', 'sotw_win', 'bingo_tile', 'achievement', 'goal'),
           ].join('\n\n'),
         })],
+        flags: 64,
       });
     }
 
@@ -36,6 +37,7 @@ module.exports = {
         title: 'Bank rats',
         description: theme.rankLines(rows, r => `<@${r.user_id}> — **${r.coins.toLocaleString()}**`) || 'Nobody has earned a coin yet.',
       })],
+      flags: 64,
     });
   },
 };

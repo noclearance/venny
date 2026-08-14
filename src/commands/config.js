@@ -59,7 +59,7 @@ module.exports = {
     if (sub === 'wom-group') {
       const groupId = interaction.options.getInteger('group_id');
       db.prepare('UPDATE guild_settings SET wom_group_id = ? WHERE guild_id = ?').run(groupId, interaction.guildId);
-      await interaction.reply(`✅ WOM group ID set to **${groupId}**. Verify at https://wiseoldman.net/groups/${groupId}`);
+      await interaction.reply({ content: `WOM group ID set to **${groupId}**. Verify at https://wiseoldman.net/groups/${groupId}`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `WOM group ID set to ${groupId} by <@${interaction.user.id}>`);
       return;
     }
@@ -75,7 +75,7 @@ module.exports = {
     if (sub === 'reminder-channel') {
       const channel = interaction.options.getChannel('channel');
       db.prepare('UPDATE guild_settings SET reminder_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply(`✅ Default reminder channel set to ${channel}.`);
+      await interaction.reply({ content: `Default reminder channel set to ${channel}.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Reminder channel set to <#${channel.id}> by <@${interaction.user.id}>`);
       return;
     }
@@ -83,7 +83,7 @@ module.exports = {
     if (sub === 'audit-channel') {
       const channel = interaction.options.getChannel('channel');
       db.prepare('UPDATE guild_settings SET audit_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply(`✅ Audit log channel set to ${channel}.`);
+      await interaction.reply({ content: `Audit log channel set to ${channel}.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Audit channel set to <#${channel.id}> by <@${interaction.user.id}>`);
       return;
     }
@@ -94,7 +94,7 @@ module.exports = {
         return interaction.reply({ content: '❌ Invalid timezone. Use an IANA name like `America/New_York`, `Europe/London`, or `UTC`. See the full list at https://en.wikipedia.org/wiki/List_of_tz_database_time_zones', flags: 64 });
       }
       db.prepare('UPDATE guild_settings SET timezone = ? WHERE guild_id = ?').run(tz, interaction.guildId);
-      await interaction.reply(`✅ Server timezone set to **${tz}**. Event times will now be parsed in this timezone.`);
+      await interaction.reply({ content: `Server timezone set to **${tz}**. Event times will now be parsed in this timezone.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Timezone set to ${tz} by <@${interaction.user.id}>`);
       return;
     }
@@ -104,7 +104,7 @@ module.exports = {
       const category = interaction.options.getString('category');
       const role = interaction.options.getRole('role');
       subs.setEventRole(interaction.guildId, category, role.id);
-      await interaction.reply(`✅ Event role for **${category}** set to ${role}. Subscribers and this role will be pinged for reminders.`);
+      await interaction.reply({ content: `Event role for **${category}** set to ${role}. Subscribers and this role will be pinged for reminders.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Event role for ${category} set to ${role} by <@${interaction.user.id}>`);
       return;
     }
@@ -112,7 +112,7 @@ module.exports = {
     if (sub === 'announce-channel') {
       const channel = interaction.options.getChannel('channel');
       db.prepare('UPDATE guild_settings SET announce_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply(`Announce channel is ${channel}. Events, raffles, SOTW, votes, bingo, and 99s get posted there.`);
+      await interaction.reply({ content: `Announce channel is ${channel}. Events, raffles, SOTW, votes, bingo, and 99s get posted there.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Announce channel set to <#${channel.id}> by <@${interaction.user.id}>`);
       return;
     }

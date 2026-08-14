@@ -22,6 +22,7 @@ module.exports = {
             ? 'Nothing logged for them yet. I pick these up while scanning linked RSNs.'
             : 'Board is empty. Link RSNs and I will start catching 99s and KC marks.',
         })],
+        flags: 64,
       });
     }
 
@@ -33,6 +34,7 @@ module.exports = {
           return `• **${r.title}** — <@${r.user_id}> ${when}`;
         }).join('\n'),
       })],
+      flags: 64,
     });
   },
 };

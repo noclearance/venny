@@ -19,7 +19,7 @@ module.exports = {
       return interaction.reply({ content: `${target} has no linked RSN. \`/member link\` first.`, flags: 64 });
     }
 
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: 64 });
     try {
       const discordMember = await interaction.guild.members.fetch(target.id).catch(() => null);
       const card = await buildProfile({

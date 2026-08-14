@@ -344,6 +344,7 @@ module.exports = {
             title: `Teams · ${card.title}`,
             description: teams.map(t => `**#${t.id} ${t.name}** — ${t.members.length} · ${t.completed} tiles`).join('\n') || 'None.',
           })],
+          flags: 64,
         });
       }
       if (action === 'create') {
@@ -354,7 +355,7 @@ module.exports = {
         if (!name) return interaction.reply({ content: 'Give it a name.', flags: 64 });
         const id = bingo.createTeam(card.id, name, interaction.user.id);
         bingo.joinTeam(id, interaction.user.id);
-        return interaction.reply(`Team **${name}** is #${id}. You are on it.`);
+        return interaction.reply({ content: `Team **${name}** is #${id}. You are on it.`, flags: 64 });
       }
       if (action === 'join') {
         const id = interaction.options.getInteger('id');
@@ -366,7 +367,7 @@ module.exports = {
         }
         if (!teamId) return interaction.reply({ content: 'Need a team number or name.', flags: 64 });
         const team = bingo.joinTeam(teamId, interaction.user.id);
-        return interaction.reply(team ? `You're on **${team.name}**.` : 'No such team.');
+        return interaction.reply({ content: team ? `You're on **${team.name}**.` : 'No such team.', flags: 64 });
       }
     }
 
@@ -377,6 +378,7 @@ module.exports = {
           title: `Bingo standings · ${card.title}`,
           description: theme.rankLines(teams, t => `**${t.name}** — ${t.completed} tiles · ${t.members.length} people`) || 'No teams.',
         })],
+        flags: 64,
       });
     }
   },

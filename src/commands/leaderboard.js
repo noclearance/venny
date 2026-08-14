@@ -53,7 +53,7 @@ module.exports = {
         return interaction.reply({ content: '❌ No WOM group ID configured. Set `WOM_GROUP_ID` in `.env` or use `/config`.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         const hiscores = await wom.getGroupHiscores(settings.wom_group_id, skill, limit);
@@ -85,7 +85,7 @@ module.exports = {
         return interaction.reply({ content: '❌ No WOM group ID configured. Set `WOM_GROUP_ID` in `.env` or use `/config`.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         const gained = await wom.getGroupGained(settings.wom_group_id, skill, period, 50);
@@ -114,7 +114,7 @@ module.exports = {
     if (sub === 'player') {
       const rsn = interaction.options.getString('rsn').trim();
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         const details = await wom.getPlayerDetails(rsn);

@@ -213,7 +213,7 @@ module.exports = {
         return interaction.reply({ content: `❌ Poll #${id} not found.`, flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         const channel = await interaction.client.channels.fetch(poll.channel_id);
@@ -251,7 +251,7 @@ module.exports = {
       const polls = db.prepare('SELECT * FROM polls WHERE guild_id = ? ORDER BY id DESC LIMIT 15').all(interaction.guildId);
 
       if (polls.length === 0) {
-        return interaction.reply('No polls yet. Create one with `/vote sotw`, `/vote botw`, or `/vote generic`!');
+        return interaction.reply({ content: 'No polls yet. Create one with `/vote sotw`, `/vote botw`, or `/vote generic`!', flags: 64 });
       }
 
       const list = polls.map(p => {
@@ -260,7 +260,7 @@ module.exports = {
         return `**#${p.id}** ${typeLabel} — ${status}`;
       }).join('\n');
 
-      await interaction.reply(`**Recent Polls:**\n\n${list}`);
+      await interaction.reply({ content: `**Recent Polls:**\n\n${list}`, flags: 64 });
       return;
     }
   },

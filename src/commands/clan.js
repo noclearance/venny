@@ -21,7 +21,7 @@ module.exports = {
     const db = getDb();
 
     if (sub === 'info') {
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       const settings = db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
       const now = new Date().toISOString();
@@ -106,7 +106,7 @@ module.exports = {
         return interaction.reply({ content: '❌ No WOM group ID configured. Set it with `/config wom-group`.', flags: 64 });
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
 
       try {
         // Fetch group hiscores to get member list
