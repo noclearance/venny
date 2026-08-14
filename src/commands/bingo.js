@@ -239,6 +239,14 @@ module.exports = {
       });
       live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
       bingo.saveMessage(card.id, interaction.channelId, msg.id);
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'raffle',
+        title: `${fresh.title} is live`,
+        description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+        fields: [require('../services/theme').field('Credits', require('../services/economy').payNote('bingo_tile'))],
+        sourceChannelId: interaction.channelId,
+        sourceMessageId: msg.id,
+      });
       return;
     }
 

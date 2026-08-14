@@ -172,7 +172,7 @@ async function finalizeSotw(client, sotw) {
       if (channel) {
         const theme = require('./theme');
         const top = sorted.slice(0, 5);
-        await channel.send({
+        const posted = await channel.send({
           embeds: [theme.embed('sotw', {
             title: `${sotw.skill} SOTW — results`,
             description: [
@@ -186,6 +186,16 @@ async function finalizeSotw(client, sotw) {
               ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`
               : undefined,
           })],
+        });
+        await require('./announce').broadcast(client, sotw.guild_id, {
+          kind: 'sotw',
+          title: `${sotw.skill} SOTW — results`,
+          description: winnerRsn
+            ? `**${winnerRsn}** takes the week${xpGained ? ` · ${xpGained.toLocaleString()} XP` : ''}.`
+            : 'Week’s done. Nobody posted gains.',
+          fields: [theme.field('Credits', require('./economy').payNote('sotw_win'))],
+          sourceChannelId: posted.channelId,
+          sourceMessageId: posted.id,
         });
       }
     } catch (err) {

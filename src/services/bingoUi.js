@@ -205,6 +205,15 @@ async function handleBingoComponent(interaction) {
     });
     live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
     bingo.saveMessage(card.id, interaction.channelId, msg.id);
+    const theme = require('./theme');
+    await require('./announce').broadcast(interaction.client, interaction.guildId, {
+      kind: 'raffle',
+      title: `${fresh.title} is live`,
+      description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+      fields: [theme.field('Credits', require('./economy').payNote('bingo_tile'))],
+      sourceChannelId: interaction.channelId,
+      sourceMessageId: msg.id,
+    });
     return true;
   }
 

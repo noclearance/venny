@@ -111,6 +111,21 @@ module.exports = {
       }
 
       await interaction.editReply(result.embed ? { embeds: [result.embed] } : result.response);
+      const posted = await interaction.fetchReply();
+      const theme = require('../services/theme');
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'sotw',
+        title: `${skill} SOTW`,
+        description: [
+          theme.line('sotwOpen', `${skill}-${result.sotwId}`),
+          'Gains from this second. `/sotw me` for your place.',
+        ].join('\n\n'),
+        fields: [
+          theme.field('Credits', require('../services/economy').payNote('sotw_win')),
+        ],
+        sourceChannelId: posted.channelId,
+        sourceMessageId: posted.id,
+      });
       await audit(interaction.client, interaction.guildId, `SOTW #${result.sotwId} **${skill}** started by <@${interaction.user.id}>`);
       return;
     }

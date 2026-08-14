@@ -57,9 +57,18 @@ async function startNextQueuedSotw(guildId, client) {
     try {
       const channel = await client.channels.fetch(next.channel_id);
       if (channel) {
-        await channel.send(result.embed
-          ? { content: '🔄 Pulled the next skill from the queue.', embeds: [result.embed] }
-          : { content: `🔄 **Auto-started from queue:**\n\n${result.response}` });
+        const posted = await channel.send(result.embed
+          ? { content: 'Pulled the next skill from the queue.', embeds: [result.embed] }
+          : { content: `Auto-started from queue:\n\n${result.response}` });
+        const theme = require('./theme');
+        await require('./announce').broadcast(client, guildId, {
+          kind: 'sotw',
+          title: `${next.skill} SOTW`,
+          description: `${theme.line('sotwOpen', next.skill)}\n\nPulled from the queue. Gains count now.`,
+          fields: [theme.field('Credits', require('./economy').payNote('sotw_win'))],
+          sourceChannelId: posted.channelId,
+          sourceMessageId: posted.id,
+        });
       }
     } catch (err) {
       console.error('Failed to post queue auto-start announcement:', err.message);

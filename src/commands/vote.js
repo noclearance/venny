@@ -188,6 +188,15 @@ module.exports = {
         VALUES (?, 'generic', ?, ?, ?, ?, ?, 0, ?)
       `).run(interaction.guildId, question, interaction.channelId, pollMsg.id, JSON.stringify(uniqueOptions), endsAt.toISOString(), interaction.user.id);
 
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'poll',
+        title: 'Clan vote',
+        description: `${question}\n\nOne vote. Hit the poll on the original post.`,
+        fields: [theme.field('Closes', theme.when(endsAt.toISOString()), true)],
+        sourceChannelId: pollMsg.channelId,
+        sourceMessageId: pollMsg.id,
+      });
+
       await interaction.followUp({
         content: `Poll **#${result.lastInsertRowid}**. Stop it with \`/vote cancel id:${result.lastInsertRowid}\`.`,
         flags: 64,
@@ -359,6 +368,21 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
     VALUES (?, 'botw', ?, ?, ?, ?, ?, 0, ?)
   `).run(interaction.guildId, questionText, interaction.channelId, pollMsg.id, JSON.stringify(uniqueBosses), endsAt.toISOString(), interaction.user.id);
 
+  await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+    kind: 'poll',
+    title: 'Boss of the Week vote',
+    description: [
+      'One vote. Pick the boss for next week.',
+      rolled ? theme.line('voteRoll', Date.now()) : null,
+    ].filter(Boolean).join('\n\n'),
+    fields: [
+      theme.field('Closes', theme.when(endsAt.toISOString()), true),
+      theme.field(rolled ? 'I rolled' : 'On the ballot', uniqueBosses.join('\n')),
+    ],
+    sourceChannelId: pollMsg.channelId,
+    sourceMessageId: pollMsg.id,
+  });
+
   await interaction.followUp({
     content: `Poll **#${result.lastInsertRowid}**. Stop it with \`/vote cancel id:${result.lastInsertRowid}\`.`,
     flags: 64,
@@ -419,6 +443,24 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     sotwDuration,
     interaction.user.id
   );
+
+  await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+    kind: 'sotw',
+    title: 'Skill of the Week vote',
+    description: [
+      'One vote. Pick the skill for the next week.',
+      rolled ? theme.line('voteRoll', Date.now()) : null,
+      autoStart
+        ? `Winner goes on Wise Old Man and the calendar for **${sotwDuration} days**.`
+        : 'Votes only — will not start a week on Wise Old Man.',
+    ].filter(Boolean).join('\n\n'),
+    fields: [
+      theme.field('Closes', theme.when(endsAt), true),
+      theme.field('Credits', economy.payNote('sotw_win')),
+    ],
+    sourceChannelId: pollMsg.channelId,
+    sourceMessageId: pollMsg.id,
+  });
 
   await interaction.followUp({
     content: `Poll **#${result.lastInsertRowid}**. Stop it with \`/vote cancel id:${result.lastInsertRowid}\`.`,

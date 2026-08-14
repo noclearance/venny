@@ -7,6 +7,9 @@ const { buildRsvpRow, buildEventContent, getAttendance } = require('../services/
 const { getPaginatedData, buildPagePayload } = require('../services/pagination');
 const { audit } = require('../services/audit');
 const subs = require('../services/subscriptions');
+const theme = require('../services/theme');
+const economy = require('../services/economy');
+const { broadcast } = require('../services/announce');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -100,6 +103,21 @@ module.exports = {
 
       const reply = await interaction.fetchReply();
       db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
+      await broadcast(interaction.client, interaction.guildId, {
+        kind: 'event',
+        title,
+        description: [
+          event.description || theme.line('eventPosted', event.id),
+          'Hit **Going** on the card if you’re in. I’ll ping 15 minutes before.',
+        ].join('\n\n'),
+        fields: [
+          theme.field('When', theme.when(event.event_time), true),
+          theme.field('Credits', economy.payNote('event_rsvp')),
+        ],
+        sourceChannelId: reply.channelId,
+        sourceMessageId: reply.id,
+        mention: subs.buildMentionString(interaction.guildId, category),
+      });
       await audit(interaction.client, interaction.guildId, `Event #${event.id} **${title}** created by <@${interaction.user.id}>`);
       return;
     }
@@ -142,8 +160,6 @@ module.exports = {
       const mentionStr = alreadyReminded
         ? null
         : subs.buildMentionString(event.guild_id, event.category || 'general');
-      const theme = require('../services/theme');
-      const economy = require('../services/economy');
       await interaction.reply({
         content: mentionStr || undefined,
         embeds: [theme.embed('event', {

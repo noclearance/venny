@@ -85,7 +85,7 @@ module.exports = {
 
       const theme = require('../services/theme');
       const economy = require('../services/economy');
-      await interaction.reply({
+      const reply = await interaction.reply({
         embeds: [theme.embed('raffle', {
           title: title,
           description: [
@@ -100,6 +100,21 @@ module.exports = {
           ],
         })],
         components: [row],
+        fetchReply: true,
+      });
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'raffle',
+        title,
+        description: [
+          theme.line('raffleOpen', raffleId),
+          ticketLine(ticketGp),
+        ].join('\n\n'),
+        fields: [
+          theme.field('Ticket', ticketGp > 0 ? `${ticketGp.toLocaleString()} GP each` : 'Free', true),
+          theme.field('Credits', economy.payNote('raffle_enter', 'raffle_win')),
+        ],
+        sourceChannelId: reply.channelId,
+        sourceMessageId: reply.id,
       });
       await audit(interaction.client, interaction.guildId, `Raffle #${raffleId} **${title}** created by <@${interaction.user.id}>`);
       return;
@@ -192,7 +207,7 @@ module.exports = {
       require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win');
 
       const theme = require('../services/theme');
-      await interaction.reply({
+      const drawMsg = await interaction.reply({
         embeds: [theme.embed('raffle', {
           title: raffle.title,
           description: [
@@ -201,6 +216,16 @@ module.exports = {
             weightInfo.trim(),
           ].filter(Boolean).join('\n'),
         })],
+        fetchReply: true,
+      });
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'raffle',
+        title: `Raffle drawn · ${raffle.title}`,
+        description: `<@${winner.user_id}> takes it. ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}.`,
+        fields: [theme.field('Credits', require('../services/economy').payNote('raffle_win'))],
+        sourceChannelId: drawMsg.channelId,
+        sourceMessageId: drawMsg.id,
+        mention: `<@${winner.user_id}>`,
       });
       await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${winner.user_id}>`);
       return;

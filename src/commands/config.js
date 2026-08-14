@@ -42,7 +42,7 @@ module.exports = {
         .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('announce-channel')
-        .setDescription('Channel for 99s, goals, bingo stamps, and BOTW noise')
+        .setDescription('Clan-wide board: events, raffles, SOTW, votes, bingo, 99s')
         .addChannelOption(opt => opt.setName('channel').setDescription('Announce channel').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('view')
@@ -112,7 +112,7 @@ module.exports = {
     if (sub === 'announce-channel') {
       const channel = interaction.options.getChannel('channel');
       db.prepare('UPDATE guild_settings SET announce_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply(`Announce channel is ${channel}. 99s and goals land there.`);
+      await interaction.reply(`Announce channel is ${channel}. Events, raffles, SOTW, votes, bingo, and 99s get posted there.`);
       await audit(interaction.client, interaction.guildId, `Announce channel set to <#${channel.id}> by <@${interaction.user.id}>`);
       return;
     }
