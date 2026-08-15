@@ -14,7 +14,7 @@ module.exports = {
   async execute(interaction) {
     const target = interaction.options.getUser('user') || interaction.user;
     const db = getDb();
-    const member = db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, target.id);
+    const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, target.id);
     if (!member) {
       return interaction.reply({ content: `${target} has no linked RSN. \`/member link\` first.`, flags: 64 });
     }

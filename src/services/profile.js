@@ -12,26 +12,26 @@ function dash(n) {
 
 async function buildProfile({ guildId, user, memberRow, discordMember }) {
   const parsed = await loadPlayer(memberRow.rsn, { refresh: true });
-  cacheProfile(guildId, memberRow.user_id, memberRow.rsn, parsed);
+  await cacheProfile(guildId, memberRow.user_id, memberRow.rsn, parsed);
 
   const db = getDb();
-  const clanPlayer = db.prepare('SELECT * FROM clan_players WHERE guild_id = ? AND rsn = ?').get(guildId, memberRow.rsn);
+  const clanPlayer = await db.prepare('SELECT * FROM clan_players WHERE guild_id = ? AND rsn = ?').get(guildId, memberRow.rsn);
   let womRole = clanPlayer?.role || null;
   try {
     const groups = await wom.getPlayerGroups(memberRow.rsn);
-    const settings = db.prepare('SELECT wom_group_id FROM guild_settings WHERE guild_id = ?').get(guildId);
+    const settings = await db.prepare('SELECT wom_group_id FROM guild_settings WHERE guild_id = ?').get(guildId);
     const ours = Array.isArray(groups) ? groups.find(g => g.groupId === settings?.wom_group_id || g.group?.id === settings?.wom_group_id) : null;
     if (ours?.role) womRole = ours.role;
   } catch { /* optional */ }
 
-  const sotwWins = db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(xp_gained),0) as xp FROM sotw_winners WHERE guild_id = ? AND winner_rsn = ?').get(guildId, memberRow.rsn);
-  const raffleWins = db.prepare('SELECT COUNT(*) as count FROM raffles WHERE guild_id = ? AND winner_id = ? AND drawn = 1').get(guildId, memberRow.user_id);
-  const raffleEntries = db.prepare(`
+  const sotwWins = await db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(xp_gained),0) as xp FROM sotw_winners WHERE guild_id = ? AND winner_rsn = ?').get(guildId, memberRow.rsn);
+  const raffleWins = await db.prepare('SELECT COUNT(*) as count FROM raffles WHERE guild_id = ? AND winner_id = ? AND drawn = 1').get(guildId, memberRow.user_id);
+  const raffleEntries = await db.prepare(`
     SELECT COUNT(*) as count FROM raffle_entries re
     JOIN raffles r ON r.id = re.raffle_id
     WHERE r.guild_id = ? AND re.user_id = ?
   `).get(guildId, memberRow.user_id);
-  const attendance = db.prepare(`
+  const attendance = await db.prepare(`
     SELECT
       SUM(CASE WHEN ea.status = 'yes' THEN 1 ELSE 0 END) as yes,
       COUNT(*) as total
@@ -39,7 +39,7 @@ async function buildProfile({ guildId, user, memberRow, discordMember }) {
     JOIN events e ON e.id = ea.event_id
     WHERE e.guild_id = ? AND ea.user_id = ?
   `).get(guildId, memberRow.user_id);
-  const recentAch = db.prepare('SELECT title FROM achievements WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 5').all(guildId, memberRow.user_id);
+  const recentAch = await db.prepare('SELECT title FROM achievements WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 5').all(guildId, memberRow.user_id);
 
   const discordRoles = discordMember?.roles?.cache
     ? [...discordMember.roles.cache.values()]

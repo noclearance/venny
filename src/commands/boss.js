@@ -33,7 +33,7 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
-    const settings = db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+    const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
 
     if (sub === 'week') {
       const boss = interaction.options.getString('boss');
@@ -42,9 +42,9 @@ module.exports = {
           return interaction.reply({ content: 'Mods start BOTW.', flags: 64 });
         }
         const days = interaction.options.getInteger('days') || 7;
-        db.prepare('UPDATE botw SET ended = 1 WHERE guild_id = ? AND ended = 0').run(interaction.guildId);
+        await db.prepare('UPDATE botw SET ended = 1 WHERE guild_id = ? AND ended = 0').run(interaction.guildId);
         const ends = new Date(Date.now() + days * 86400000).toISOString();
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO botw (guild_id, boss, starts_at, ends_at, channel_id, created_by)
           VALUES (?, ?, datetime('now'), ?, ?, ?)
         `).run(interaction.guildId, boss, ends, interaction.channelId, interaction.user.id);
@@ -64,7 +64,7 @@ module.exports = {
           })],
         });
       }
-      const current = db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       if (!current) return interaction.reply({ content: 'No BOTW running. A mod can `/boss week boss:`.', flags: 64 });
       return interaction.reply({
         flags: 64,

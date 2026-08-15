@@ -13,15 +13,15 @@ function staff(interaction) {
 }
 
 async function syncPostedBoard(interaction, card) {
-  const fresh = bingo.getBingo(interaction.guildId, card.id);
+  const fresh = await bingo.getBingo(interaction.guildId, card.id);
   if (!fresh?.channel_id || !fresh.message_id) return;
   try {
     const channel = await interaction.client.channels.fetch(fresh.channel_id);
     const msg = await channel.messages.fetch(fresh.message_id);
     if (fresh.status === 'active') {
-      await msg.edit(draft.livePayload(fresh));
+      await msg.edit(await draft.livePayload(fresh));
     } else if (fresh.status === 'draft' || fresh.status === 'paused') {
-      await msg.edit(draft.draftPayload(fresh));
+      await msg.edit(await draft.draftPayload(fresh));
     }
   } catch {
     // pin may have been deleted — leave it
@@ -37,7 +37,7 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
   if (card.status !== 'active') {
     return replyFlags(interaction, { content: 'Bingo is not live.', flags: 64 });
   }
-  const existing = bingo.progressOf(card.id, interaction.user.id).find(p => p.tile_id === tile.id);
+  const existing = (await bingo.progressOf(card.id, interaction.user.id)).find(p => p.tile_id === tile.id);
   if (existing?.status === 'complete') {
     return replyFlags(interaction, { content: `You already have **${tile.label}**.`, flags: 64 });
   }
@@ -59,7 +59,7 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
       });
     }
     if (result.ok) {
-      bingo.claimTile({
+      await bingo.claimTile({
         card,
         tile,
         userId: interaction.user.id,
@@ -76,7 +76,7 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
     });
   }
 
-  bingo.claimTile({
+  await bingo.claimTile({
     card,
     tile,
     userId: interaction.user.id,
@@ -98,13 +98,13 @@ function parseId(customId) {
   return { action: parts[1], boardId: Number(parts[2]), extra: parts[3] };
 }
 
-function loadCard(interaction, boardId) {
-  return bingo.getBingo(interaction.guildId, boardId);
+async function loadCard(interaction, boardId) {
+  return await bingo.getBingo(interaction.guildId, boardId);
 }
 
 async function refreshDraft(interaction, card, extra) {
-  const fresh = bingo.getBingo(interaction.guildId, card.id);
-  const payload = { ...draft.draftPayload(fresh), content: extra || null };
+  const fresh = await bingo.getBingo(interaction.guildId, card.id);
+  const payload = { ...(await draft.draftPayload(fresh)), content: extra || null };
   if (interaction.deferred || interaction.replied) {
     return interaction.editReply(payload);
   }
@@ -119,7 +119,7 @@ async function handleBingoComponent(interaction) {
   if (!id.startsWith('bg:')) return false;
 
   const { action, boardId, extra } = parseId(id);
-  const card = loadCard(interaction, boardId);
+  const card = await loadCard(interaction, boardId);
   if (!card) {
     const msg = { content: 'That board is gone.', flags: 64 };
     if (interaction.isRepliable()) await interaction.reply(msg).catch(() => {});
@@ -140,11 +140,11 @@ async function handleBingoComponent(interaction) {
     return true;
   }
   if (action === 'prev') {
-    await interaction.reply({ embeds: [bingo.boardEmbed(card)] });
+    await interaction.reply({ embeds: [await bingo.boardEmbed(card)] });
     return true;
   }
   if (action === 'edit') {
-    const menu = draft.tileSelect(card);
+    const menu = await draft.tileSelect(card);
     if (!menu) {
       await interaction.reply({ content: 'No tiles yet. Bulk paste or load a template first.', flags: 64 });
       return true;
@@ -173,7 +173,7 @@ async function handleBingoComponent(interaction) {
       await interaction.reply({ content: 'Board is locked.', flags: 64 });
       return true;
     }
-    bingo.replaceTiles(card.id, []);
+    await bingo.replaceTiles(card.id, []);
     await interaction.update({ content: 'Board wiped.', components: [] });
     await syncPostedBoard(interaction, card);
     return true;
@@ -197,15 +197,15 @@ async function handleBingoComponent(interaction) {
     }
     await interaction.deferUpdate();
     const { getDb } = require('../db/database');
-    getDb().prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
+    await getDb().prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
     await bingo.snapshotBaselines(card, interaction.guildId);
-    const fresh = bingo.getBingo(interaction.guildId, card.id);
+    const fresh = await bingo.getBingo(interaction.guildId, card.id);
     const msg = await interaction.followUp({
       content: 'Board is live. **Claim a tile** on the board, or `/bingo submit`. WOM tiles stamp themselves.',
-      ...draft.livePayload(fresh),
+      ...(await draft.livePayload(fresh)),
     });
-    live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
-    bingo.saveMessage(card.id, interaction.channelId, msg.id);
+    await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
+    await bingo.saveMessage(card.id, interaction.channelId, msg.id);
     const theme = require('./theme');
     await require('./announce').broadcast(interaction.client, interaction.guildId, {
       kind: 'raffle',
@@ -223,7 +223,7 @@ async function handleBingoComponent(interaction) {
       await interaction.reply({ content: 'Board is not live.', flags: 64 });
       return true;
     }
-    const menu = draft.claimSelect(card, interaction.user.id);
+    const menu = await draft.claimSelect(card, interaction.user.id);
     if (!menu) {
       await interaction.reply({ content: 'No tiles on this board.', flags: 64 });
       return true;
@@ -233,8 +233,8 @@ async function handleBingoComponent(interaction) {
   }
 
   if (action === 'mine') {
-    const tiles = bingo.tilesOf(card.id);
-    const byTile = new Map(bingo.progressOf(card.id, interaction.user.id).map(p => [p.tile_id, p]));
+    const tiles = await bingo.tilesOf(card.id);
+    const byTile = new Map((await bingo.progressOf(card.id, interaction.user.id)).map(p => [p.tile_id, p]));
     const lines = tiles.map(t => {
       const st = byTile.get(t.id)?.status;
       const mark = st === 'complete' ? '✅' : st === 'pending' ? '🟨' : st === 'denied' ? '❌' : '⬜';
@@ -249,7 +249,7 @@ async function handleBingoComponent(interaction) {
 
   if (action === 'csel') {
     const slot = Number(interaction.values?.[0]);
-    const tile = bingo.tilesOf(card.id).find(t => t.slot === slot);
+    const tile = (await bingo.tilesOf(card.id)).find(t => t.slot === slot);
     if (!tile) {
       await interaction.reply({ content: 'That tile is gone.', flags: 64 });
       return true;
@@ -269,17 +269,17 @@ async function handleBingoComponent(interaction) {
       return true;
     }
     if (key === 'previous') {
-      const prev = bingo.lastGuildBoard(interaction.guildId, card.id);
+      const prev = await bingo.lastGuildBoard(interaction.guildId, card.id);
       if (!prev) {
         await interaction.reply({ content: 'No previous board in this server.', flags: 64 });
         return true;
       }
-      const n = bingo.copyTilesFrom(prev.id, card.id, bingo.capacityOf(card));
+      const n = await bingo.copyTilesFrom(prev.id, card.id, bingo.capacityOf(card));
       await interaction.update({ content: `Copied ${n} tiles from **${prev.title}**.`, components: [] });
       await syncPostedBoard(interaction, card);
       return true;
     }
-    const result = bingo.applyTemplate(card, key);
+    const result = await bingo.applyTemplate(card, key);
     if (!result.ok) {
       await interaction.reply({ content: result.error, flags: 64 });
       return true;
@@ -291,7 +291,7 @@ async function handleBingoComponent(interaction) {
 
   if (action === 'sel') {
     const slot = Number(interaction.values?.[0]);
-    const tile = bingo.tilesOf(card.id).find(t => t.slot === slot);
+    const tile = (await bingo.tilesOf(card.id)).find(t => t.slot === slot);
     await interaction.showModal(draft.tileModal(card.id, slot, tile));
     return true;
   }
@@ -305,14 +305,14 @@ async function handleBingoModal(interaction) {
   const parts = id.split(':');
   const action = parts[1];
   const boardId = Number(parts[2]);
-  const card = bingo.getBingo(interaction.guildId, boardId);
+  const card = await bingo.getBingo(interaction.guildId, boardId);
   if (!card) {
     await interaction.reply({ content: 'That board is gone.', flags: 64 });
     return true;
   }
   if (action === 'mclaim') {
     const slot = Number(parts[3]);
-    const tile = bingo.tilesOf(card.id).find(t => t.slot === slot);
+    const tile = (await bingo.tilesOf(card.id)).find(t => t.slot === slot);
     if (!tile) {
       await interaction.reply({ content: 'That tile is gone.', flags: 64 });
       return true;
@@ -335,14 +335,14 @@ async function handleBingoModal(interaction) {
     const list = interaction.fields.getTextInputValue('list');
     const mode = interaction.fields.getTextInputValue('mode');
     const parsed = parseBingoList(list, { defaultMode: mode, maxTiles: bingo.capacityOf(card) });
-    bingo.replaceTiles(card.id, parsed.tiles);
+    await bingo.replaceTiles(card.id, parsed.tiles);
     const fail = parsed.errors.length
       ? ` Lines ${parsed.errors.map(e => e.line).join(', ')} failed.`
       : '';
     await interaction.reply({
       content: `Loaded **${parsed.loaded}** tiles.${fail}`,
       flags: 64,
-      embeds: [draft.draftEmbed(bingo.getBingo(interaction.guildId, card.id))],
+      embeds: [await draft.draftEmbed(await bingo.getBingo(interaction.guildId, card.id))],
     });
     await syncPostedBoard(interaction, card);
     return true;
@@ -354,13 +354,13 @@ async function handleBingoModal(interaction) {
     const { inferFromLabel, resolveMode } = require('./bingoParser');
     const inferred = inferFromLabel(label);
     const mode = resolveMode(interaction.fields.getTextInputValue('mode')) || inferred.verify_mode;
-    bingo.setTile(card.id, slot, {
+    await bingo.setTile(card.id, slot, {
       label,
       verifyMode: mode,
       metric: inferred.metric,
       amount: inferred.amount,
     });
-    await interaction.reply({ content: `Updated tile #${slot + 1}.`, flags: 64, embeds: [draft.draftEmbed(bingo.getBingo(interaction.guildId, card.id))] });
+    await interaction.reply({ content: `Updated tile #${slot + 1}.`, flags: 64, embeds: [await draft.draftEmbed(await bingo.getBingo(interaction.guildId, card.id))] });
     await syncPostedBoard(interaction, card);
     return true;
   }
@@ -368,11 +368,11 @@ async function handleBingoModal(interaction) {
   if (action === 'mswap') {
     const a = Number(interaction.fields.getTextInputValue('a')) - 1;
     const b = Number(interaction.fields.getTextInputValue('b')) - 1;
-    const ok = bingo.swapTiles(card.id, a, b);
+    const ok = await bingo.swapTiles(card.id, a, b);
     await interaction.reply({
       content: ok ? `Swapped #${a + 1} and #${b + 1}.` : 'Those slot numbers are not on the board.',
       flags: 64,
-      embeds: ok ? [draft.draftEmbed(bingo.getBingo(interaction.guildId, card.id))] : undefined,
+      embeds: ok ? [await draft.draftEmbed(await bingo.getBingo(interaction.guildId, card.id))] : undefined,
     });
     if (ok) await syncPostedBoard(interaction, card);
     return true;
@@ -383,7 +383,7 @@ async function handleBingoModal(interaction) {
 
 async function ingestList(interaction, card, text) {
   const parsed = parseBingoList(text, { maxTiles: bingo.capacityOf(card) });
-  bingo.replaceTiles(card.id, parsed.tiles);
+  await bingo.replaceTiles(card.id, parsed.tiles);
   const fail = parsed.errors.length
     ? ` Lines ${parsed.errors.map(e => e.line).join(', ')} failed.`
     : '';

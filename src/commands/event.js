@@ -69,10 +69,10 @@ module.exports = {
       const recurrence = interaction.options.getString('recurring') || 'none';
       const category = interaction.options.getString('category') || 'general';
       const channelOption = interaction.options.getChannel('channel');
-      const settings = db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+      const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
       const channel = channelOption || (settings && settings.reminder_channel ? await interaction.client.channels.fetch(settings.reminder_channel).catch(() => null) : null) || interaction.channel;
 
-      const eventDate = parseEventDate(datetimeStr, interaction.guildId);
+      const eventDate = await parseEventDate(datetimeStr, interaction.guildId);
       if (!eventDate) {
         return interaction.reply({ content: '❌ Could not parse that date/time. Try a format like `2024-12-25 19:00` or `Dec 25 2024 7pm`. Set your server timezone with `/config timezone`.', flags: 64 });
       }
@@ -81,7 +81,7 @@ module.exports = {
         return interaction.reply({ content: '❌ That date is in the past.', flags: 64 });
       }
 
-      const result = db.prepare(`
+      const result = await db.prepare(`
         INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(interaction.guildId, title, description, eventDate.toISOString(), channel.id, interaction.user.id, recurrence, category);
@@ -97,12 +97,12 @@ module.exports = {
       };
 
       await interaction.reply({
-        embeds: [buildEventContent(event, getAttendance(event.id))],
+        embeds: [buildEventContent(event, await getAttendance(event.id))],
         components: [buildRsvpRow(event.id)],
       });
 
       const reply = await interaction.fetchReply();
-      db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
+      await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
       await broadcast(interaction.client, interaction.guildId, {
         kind: 'event',
         title,
@@ -116,7 +116,7 @@ module.exports = {
         ],
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
-        mention: subs.buildMentionString(interaction.guildId, category),
+        mention: await subs.buildMentionString(interaction.guildId, category),
       });
       await audit(interaction.client, interaction.guildId, `Event #${event.id} **${title}** created by <@${interaction.user.id}>`);
       return;
@@ -133,7 +133,7 @@ module.exports = {
 
     if (sub === 'cancel') {
       const id = interaction.options.getInteger('id');
-      const event = db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const event = await db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
 
       if (!event) {
         return interaction.reply({ content: `❌ Event #${id} not found.`, flags: 64 });
@@ -150,7 +150,7 @@ module.exports = {
 
     if (sub === 'remind') {
       const id = interaction.options.getInteger('id');
-      const event = db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const event = await db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
 
       if (!event) {
         return interaction.reply({ content: `❌ Event #${id} not found.`, flags: 64 });
@@ -159,7 +159,7 @@ module.exports = {
       const alreadyReminded = Number(event.reminder_sent) === 1;
       const mentionStr = alreadyReminded
         ? null
-        : subs.buildMentionString(event.guild_id, event.category || 'general');
+        : await subs.buildMentionString(event.guild_id, event.category || 'general');
       await interaction.reply({
         content: mentionStr || undefined,
         embeds: [theme.embed('event', {
@@ -176,7 +176,7 @@ module.exports = {
         allowedMentions: alreadyReminded ? { parse: [] } : { parse: ['users', 'roles'] },
       });
       if (!alreadyReminded) {
-        db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
+        await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
       }
     }
   },
@@ -187,14 +187,14 @@ module.exports = {
     const { filterChoices, respond } = require('../services/autocomplete');
     const db = getDb();
     const now = new Date().toISOString();
-    const upcoming = db.prepare(`
+    const upcoming = await db.prepare(`
       SELECT id, title, event_time FROM events
       WHERE guild_id = ? AND event_time >= ?
       ORDER BY event_time ASC LIMIT 25
     `).all(interaction.guildId, now);
     const rows = upcoming.length
       ? upcoming
-      : db.prepare(`
+      : await db.prepare(`
           SELECT id, title, event_time FROM events
           WHERE guild_id = ? ORDER BY event_time DESC LIMIT 25
         `).all(interaction.guildId);

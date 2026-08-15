@@ -47,11 +47,15 @@ function assertPersistent(dbPath) {
   }
 }
 
+function usesPostgres() {
+  return Boolean((process.env.DATABASE_URL || '').trim());
+}
+
 function wrapStatement(stmt) {
   return {
-    get: (...args) => stmt.get(...args),
-    all: (...args) => stmt.all(...args),
-    run: (...args) => {
+    get: async (...args) => stmt.get(...args),
+    all: async (...args) => stmt.all(...args),
+    run: async (...args) => {
       const result = stmt.run(...args) || {};
       return {
         lastInsertRowid: Number(result.lastInsertRowid ?? 0),
@@ -61,34 +65,50 @@ function wrapStatement(stmt) {
   };
 }
 
-function openDatabase(dbPath) {
+function openSqlite(dbPath) {
   const raw = new DatabaseSync(dbPath, {
     enableForeignKeyConstraints: true,
     timeout: 5000,
   });
   raw.exec('PRAGMA journal_mode = WAL');
   return {
-    exec: sql => raw.exec(sql),
-    pragma: pragma => raw.exec(`PRAGMA ${pragma}`),
+    kind: 'sqlite',
+    exec: async sql => raw.exec(sql),
     prepare: sql => wrapStatement(raw.prepare(sql)),
   };
 }
 
 function getDb() {
-  if (!db) {
-    assertPersistent(DB_PATH);
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    db = openDatabase(DB_PATH);
-    console.log(onRender() ? `Persistent database at ${DB_PATH}` : `Database initialized at ${DB_PATH}`);
-  }
+  if (!db) throw new Error('Database not initialized. Call await initDb() first.');
   return db;
 }
 
-function initDb() {
-  const db = getDb();
+async function openDb() {
+  if (db) return db;
+  if (usesPostgres()) {
+    const { wrapPg } = require('./postgres');
+    db = wrapPg();
+    console.log('Persistent database: Render Postgres');
+    return db;
+  }
+  if (onRender()) assertPersistent(DB_PATH);
+  else warnIfCloudSynced(DB_PATH);
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  db = openSqlite(DB_PATH);
+  console.log(onRender() ? `Persistent database at ${DB_PATH}` : `Database initialized at ${DB_PATH}`);
+  return db;
+}
 
-  db.exec(`
+async function initDb() {
+  const db = await openDb();
+  if (usesPostgres()) {
+    const { initPostgres } = require('./postgres');
+    await initPostgres(db);
+    return db;
+  }
+
+  await db.exec(`
     -- Guild settings (one row per Discord server)
     CREATE TABLE IF NOT EXISTS guild_settings (
       guild_id       TEXT PRIMARY KEY,
@@ -200,20 +220,20 @@ function initDb() {
 
   // ── Migrations for existing databases ──────────────
   // CREATE TABLE IF NOT EXISTS won't add new columns to existing tables.
-  migrateColumn(db, 'events', 'recurrence', 'TEXT DEFAULT "none"');       // 'none', 'weekly', 'monthly'
-  migrateColumn(db, 'events', 'parent_event_id', 'INTEGER');             // original event ID for recurring chain
-  migrateColumn(db, 'events', 'next_created', 'INTEGER DEFAULT 0');    // 1 = next occurrence already generated
-  migrateColumn(db, 'guild_settings', 'audit_channel', 'TEXT');         // channel for action logging
-  migrateColumn(db, 'guild_settings', 'timezone', 'TEXT');              // IANA timezone, e.g. 'America/New_York'
-  migrateColumn(db, 'events', 'category', 'TEXT DEFAULT "general"');     // 'boss', 'pvm', 'skilling', 'social', 'general'
-  migrateColumn(db, 'events', 'message_id', 'TEXT');                    // message ID for RSVP buttons
-  migrateColumn(db, 'events', 'message_channel_id', 'TEXT');            // channel that holds the RSVP message
-  migrateColumn(db, 'raffles', 'weight_mode', 'TEXT DEFAULT "none"');   // 'none', 'sotw', 'attendance', 'activity'
-  migrateColumn(db, 'raffle_entries', 'weight', 'INTEGER DEFAULT 1');   // weight multiplier for weighted raffles
-  migrateColumn(db, 'raffle_entries', 'weight_reason', 'TEXT');         // why this weight was assigned
+  await migrateColumn(db, 'events', 'recurrence', 'TEXT DEFAULT "none"');
+  await migrateColumn(db, 'events', 'parent_event_id', 'INTEGER');
+  await migrateColumn(db, 'events', 'next_created', 'INTEGER DEFAULT 0');
+  await migrateColumn(db, 'guild_settings', 'audit_channel', 'TEXT');
+  await migrateColumn(db, 'guild_settings', 'timezone', 'TEXT');
+  await migrateColumn(db, 'events', 'category', 'TEXT DEFAULT "general"');
+  await migrateColumn(db, 'events', 'message_id', 'TEXT');
+  await migrateColumn(db, 'events', 'message_channel_id', 'TEXT');
+  await migrateColumn(db, 'raffles', 'weight_mode', 'TEXT DEFAULT "none"');
+  await migrateColumn(db, 'raffle_entries', 'weight', 'INTEGER DEFAULT 1');
+  await migrateColumn(db, 'raffle_entries', 'weight_reason', 'TEXT');
 
   // ── New tables for v2 features ──────────────────────
-  db.exec(`
+  await db.exec(`
     -- Event subscriptions (DB-based, optional role support)
     CREATE TABLE IF NOT EXISTS event_subscriptions (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -436,24 +456,23 @@ function initDb() {
     CREATE INDEX IF NOT EXISTS idx_economy_guild ON economy_balances(guild_id, coins);
   `);
 
-  migrateColumn(db, 'guild_settings', 'announce_channel', 'TEXT');
-  migrateColumn(db, 'sotw', 'standings_message_id', 'TEXT');
-  migrateColumn(db, 'sotw', 'standings_channel_id', 'TEXT');
-  migrateColumn(db, 'bingo_events', 'layout', 'TEXT DEFAULT "grid"');
-  migrateColumn(db, 'bingo_tiles', 'notes', 'TEXT');
-  migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
-  migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
+  await migrateColumn(db, 'guild_settings', 'announce_channel', 'TEXT');
+  await migrateColumn(db, 'sotw', 'standings_message_id', 'TEXT');
+  await migrateColumn(db, 'sotw', 'standings_channel_id', 'TEXT');
+  await migrateColumn(db, 'bingo_events', 'layout', 'TEXT DEFAULT "grid"');
+  await migrateColumn(db, 'bingo_tiles', 'notes', 'TEXT');
+  await migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
+  await migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
 
   return db;
 }
 
-// Add a column to a table if it doesn't already exist (safe for upgrading existing DBs)
-function migrateColumn(db, table, column, definition) {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+async function migrateColumn(db, table, column, definition) {
+  const columns = await db.prepare(`PRAGMA table_info(${table})`).all();
   if (!columns.some(c => c.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`  Migration: added ${column} to ${table}`);
   }
 }
 
-module.exports = { getDb, initDb, DB_PATH };
+module.exports = { getDb, initDb, DB_PATH, usesPostgres };

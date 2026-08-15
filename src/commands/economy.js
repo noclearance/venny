@@ -18,7 +18,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === 'balance') {
       const user = interaction.options.getUser('user') || interaction.user;
-      const coins = economy.getBalance(interaction.guildId, user.id);
+      const coins = await economy.getBalance(interaction.guildId, user.id);
       return interaction.reply({
         embeds: [theme.embed('brand', {
           title: 'Pouch',
@@ -31,7 +31,7 @@ module.exports = {
       });
     }
 
-    const rows = economy.leaderboard(interaction.guildId);
+    const rows = await economy.leaderboard(interaction.guildId);
     return interaction.reply({
       embeds: [theme.embed('brand', {
         title: 'Bank rats',

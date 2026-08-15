@@ -42,7 +42,7 @@ module.exports = {
         const womId = details.id;
 
         try {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO members (guild_id, user_id, rsn, wom_id)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(guild_id, user_id) DO UPDATE SET rsn = ?, wom_id = ?
@@ -93,7 +93,7 @@ module.exports = {
     }
 
     if (sub === 'unlink') {
-      const result = db.prepare('DELETE FROM members WHERE guild_id = ? AND user_id = ?').run(interaction.guildId, interaction.user.id);
+      const result = await db.prepare('DELETE FROM members WHERE guild_id = ? AND user_id = ?').run(interaction.guildId, interaction.user.id);
 
       if (result.changes > 0) {
         await interaction.reply({ content: '✅ Your RSN link has been removed.', flags: 64 });
@@ -105,7 +105,7 @@ module.exports = {
 
     if (sub === 'whois') {
       const user = interaction.options.getUser('user');
-      const member = db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, user.id);
+      const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, user.id);
 
       if (!member) {
         await interaction.reply({ content: `${user.username} has not linked an RSN.`, flags: 64 });

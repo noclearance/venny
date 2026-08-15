@@ -3,25 +3,25 @@ const crypto = require('crypto');
 const { getDb } = require('../db/database');
 const theme = require('./theme');
 
-function createHook(guildId, name, channelId, createdBy) {
+async function createHook(guildId, name, channelId, createdBy) {
   const token = crypto.randomBytes(18).toString('hex');
-  getDb().prepare(`
+  await getDb().prepare(`
     INSERT INTO incoming_webhooks (guild_id, name, token, channel_id, created_by)
     VALUES (?, ?, ?, ?, ?)
   `).run(guildId, name, token, channelId, createdBy);
   return token;
 }
 
-function listHooks(guildId) {
-  return getDb().prepare('SELECT id, name, channel_id, created_at FROM incoming_webhooks WHERE guild_id = ?').all(guildId);
+async function listHooks(guildId) {
+  return await getDb().prepare('SELECT id, name, channel_id, created_at FROM incoming_webhooks WHERE guild_id = ?').all(guildId);
 }
 
-function revokeHook(guildId, id) {
-  return getDb().prepare('DELETE FROM incoming_webhooks WHERE id = ? AND guild_id = ?').run(id, guildId).changes;
+async function revokeHook(guildId, id) {
+  return (await getDb().prepare('DELETE FROM incoming_webhooks WHERE id = ? AND guild_id = ?').run(id, guildId)).changes;
 }
 
-function findHook(token) {
-  return getDb().prepare('SELECT * FROM incoming_webhooks WHERE token = ?').get(token);
+async function findHook(token) {
+  return await getDb().prepare('SELECT * FROM incoming_webhooks WHERE token = ?').get(token);
 }
 
 function startServer(client) {
@@ -43,7 +43,7 @@ function startServer(client) {
       return;
     }
     const token = url.slice('/hook/'.length);
-    const hook = findHook(token);
+    const hook = await findHook(token);
     if (!hook) {
       res.writeHead(401).end('bad token');
       return;

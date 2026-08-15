@@ -2,29 +2,29 @@
 const { getDb } = require('../db/database');
 const { startSotw } = require('./sotw');
 
-function addToQueue({ guildId, channelId, createdBy, skill, durationDays = 7, title = null, sourcePollId = null }) {
+async function addToQueue({ guildId, channelId, createdBy, skill, durationDays = 7, title = null, sourcePollId = null }) {
   const db = getDb();
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO sotw_queue (guild_id, skill, title, duration_days, channel_id, created_by, source_poll_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(guildId, skill, title, durationDays, channelId, createdBy, sourcePollId);
   return result.lastInsertRowid;
 }
 
-function getQueue(guildId) {
+async function getQueue(guildId) {
   const db = getDb();
-  return db.prepare('SELECT * FROM sotw_queue WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0 ORDER BY id ASC').all(guildId);
+  return await db.prepare('SELECT * FROM sotw_queue WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0 ORDER BY id ASC').all(guildId);
 }
 
-function removeFromQueue(queueId, guildId) {
+async function removeFromQueue(queueId, guildId) {
   const db = getDb();
-  const result = db.prepare('UPDATE sotw_queue SET cancelled = 1 WHERE id = ? AND guild_id = ?').run(queueId, guildId);
+  const result = await db.prepare('UPDATE sotw_queue SET cancelled = 1 WHERE id = ? AND guild_id = ?').run(queueId, guildId);
   return result.changes > 0;
 }
 
-function clearQueue(guildId) {
+async function clearQueue(guildId) {
   const db = getDb();
-  const result = db.prepare('UPDATE sotw_queue SET cancelled = 1 WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0').run(guildId);
+  const result = await db.prepare('UPDATE sotw_queue SET cancelled = 1 WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0').run(guildId);
   return result.changes;
 }
 
@@ -33,11 +33,11 @@ async function startNextQueuedSotw(guildId, client) {
   const db = getDb();
 
   // Check if there's an active SOTW
-  const active = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
+  const active = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
   if (active) return null;
 
   // Get the next queued item
-  const next = db.prepare('SELECT * FROM sotw_queue WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0 ORDER BY id ASC').get(guildId);
+  const next = await db.prepare('SELECT * FROM sotw_queue WHERE guild_id = ? AND started_at IS NULL AND cancelled = 0 ORDER BY id ASC').get(guildId);
   if (!next) return null;
 
   // Start it
@@ -51,7 +51,7 @@ async function startNextQueuedSotw(guildId, client) {
   });
 
   if (result.success) {
-    db.prepare('UPDATE sotw_queue SET started_at = ? WHERE id = ?').run(new Date().toISOString(), next.id);
+    await db.prepare('UPDATE sotw_queue SET started_at = ? WHERE id = ?').run(new Date().toISOString(), next.id);
 
     // Post announcement to the channel
     try {

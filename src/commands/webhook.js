@@ -28,7 +28,7 @@ module.exports = {
     if (sub === 'create') {
       const name = interaction.options.getString('name');
       const channel = interaction.options.getChannel('channel') || interaction.channel;
-      const token = hooks.createHook(interaction.guildId, name, channel.id, interaction.user.id);
+      const token = await hooks.createHook(interaction.guildId, name, channel.id, interaction.user.id);
       const port = process.env.WEBHOOK_PORT || '8787';
       return interaction.reply({
         content: [
@@ -44,11 +44,11 @@ module.exports = {
 
     if (sub === 'revoke') {
       const id = interaction.options.getInteger('id');
-      const n = hooks.revokeHook(interaction.guildId, id);
+      const n = await hooks.revokeHook(interaction.guildId, id);
       return interaction.reply({ content: n ? `Revoked hook #${id}.` : 'No hook with that id.', flags: 64 });
     }
 
-    const rows = hooks.listHooks(interaction.guildId);
+    const rows = await hooks.listHooks(interaction.guildId);
     return interaction.reply({
       embeds: [theme.embed('info', {
         title: 'Incoming hooks',

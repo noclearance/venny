@@ -80,10 +80,10 @@ module.exports = {
 
     if (sub === 'cancel') {
       const id = interaction.options.getInteger('id');
-      const poll = db.prepare('SELECT * FROM polls WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const poll = await db.prepare('SELECT * FROM polls WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
       if (!poll) return interaction.reply({ content: `No poll #${id}.`, flags: 64 });
       if (poll.finalized) return interaction.reply({ content: `Poll #${id} already closed (${poll.winner || 'done'}).`, flags: 64 });
-      db.prepare("UPDATE polls SET finalized = 1, auto_start = 0, winner = ? WHERE id = ?").run('Cancelled', id);
+      await db.prepare("UPDATE polls SET finalized = 1, auto_start = 0, winner = ? WHERE id = ?").run('Cancelled', id);
       try {
         const channel = await interaction.client.channels.fetch(poll.channel_id);
         const message = await channel.messages.fetch(poll.message_id);
@@ -99,7 +99,7 @@ module.exports = {
       const random = interaction.options.getBoolean('random');
       let uniqueSkills;
       if (random) {
-        uniqueSkills = rollSkills(interaction.guildId, interaction.options.getInteger('how_many') || 6);
+        uniqueSkills = await rollSkills(interaction.guildId, interaction.options.getInteger('how_many') || 6);
       } else {
         const skills = [];
         for (let i = 1; i <= 10; i++) {
@@ -124,7 +124,7 @@ module.exports = {
       const random = interaction.options.getBoolean('random');
       let uniqueBosses;
       if (random) {
-        uniqueBosses = rollBosses(interaction.guildId, interaction.options.getInteger('how_many') || 6);
+        uniqueBosses = await rollBosses(interaction.guildId, interaction.options.getInteger('how_many') || 6);
       } else {
         const bosses = [];
         for (let i = 1; i <= 10; i++) {
@@ -183,7 +183,7 @@ module.exports = {
         },
       });
 
-      const result = db.prepare(`
+      const result = await db.prepare(`
         INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, created_by)
         VALUES (?, 'generic', ?, ?, ?, ?, ?, 0, ?)
       `).run(interaction.guildId, question, interaction.channelId, pollMsg.id, JSON.stringify(uniqueOptions), endsAt.toISOString(), interaction.user.id);
@@ -207,7 +207,7 @@ module.exports = {
     // ── Results ──────────────────────────────
     if (sub === 'results') {
       const id = interaction.options.getInteger('id');
-      const poll = db.prepare('SELECT * FROM polls WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const poll = await db.prepare('SELECT * FROM polls WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
 
       if (!poll) {
         return interaction.reply({ content: `❌ Poll #${id} not found.`, flags: 64 });
@@ -248,7 +248,7 @@ module.exports = {
 
     // ── List ─────────────────────────────────
     if (sub === 'list') {
-      const polls = db.prepare('SELECT * FROM polls WHERE guild_id = ? ORDER BY id DESC LIMIT 15').all(interaction.guildId);
+      const polls = await db.prepare('SELECT * FROM polls WHERE guild_id = ? ORDER BY id DESC LIMIT 15').all(interaction.guildId);
 
       if (polls.length === 0) {
         return interaction.reply({ content: 'No polls yet. Create one with `/vote sotw`, `/vote botw`, or `/vote generic`!', flags: 64 });
@@ -292,26 +292,26 @@ function shuffle(list) {
   return copy;
 }
 
-function rollSkills(guildId, count) {
+async function rollSkills(guildId, count) {
   const pool = wom.SKILLS.filter(s => !SKIP_RANDOM.has(s));
-  const recent = getDb().prepare(`
+  const recent = (await getDb().prepare(`
     SELECT DISTINCT lower(skill) as skill FROM sotw_winners
     WHERE guild_id = ? ORDER BY id DESC LIMIT 8
-  `).all(guildId).map(r => r.skill);
+  `).all(guildId)).map(r => r.skill);
   let candidates = pool.filter(s => !recent.includes(s));
   if (candidates.length < count) candidates = [...pool];
   return shuffle(candidates).slice(0, count);
 }
 
 // Clan-week bosses from /boss — not Wintertodt, not giants, not every wildy filler.
-function rollBosses(guildId, count) {
+async function rollBosses(guildId, count) {
   const { BOSS_CHOICES, prettyMetric } = require('../osrs/catalog');
   const pool = BOSS_CHOICES.map(c => c.value);
-  const recentRows = getDb().prepare(`
+  const recentRows = await getDb().prepare(`
     SELECT DISTINCT lower(boss) as boss FROM botw
     WHERE guild_id = ? ORDER BY id DESC LIMIT 8
   `).all(guildId);
-  const pollRows = getDb().prepare(`
+  const pollRows = await getDb().prepare(`
     SELECT winner FROM polls
     WHERE guild_id = ? AND type = 'botw' AND finalized = 1 AND winner IS NOT NULL
     ORDER BY id DESC LIMIT 8
@@ -363,7 +363,7 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
     },
   });
 
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, created_by)
     VALUES (?, 'botw', ?, ?, ?, ?, ?, 0, ?)
   `).run(interaction.guildId, questionText, interaction.channelId, pollMsg.id, JSON.stringify(uniqueBosses), endsAt.toISOString(), interaction.user.id);
@@ -429,7 +429,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     },
   });
 
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
     VALUES (?, 'sotw', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(

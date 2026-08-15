@@ -30,19 +30,19 @@ async function handleButton(interaction) {
 async function handleRaffleEnter(interaction, db) {
   const raffleId = parseInt(interaction.customId.replace('raffle_enter_', ''), 10);
 
-  const raffle = db.prepare('SELECT * FROM raffles WHERE id = ? AND drawn = 0').get(raffleId);
+  const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND drawn = 0').get(raffleId);
   if (!raffle) {
     return interaction.reply({ content: 'This raffle is no longer active.', flags: 64 });
   }
 
-  const member = db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
+  const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
   if (!member) {
     return interaction.reply({ content: '❌ You need to link your OSRS RSN first! Use `/member link rsn:<your_name>` to get started.', flags: 64 });
   }
 
   try {
-    db.prepare('INSERT INTO raffle_entries (raffle_id, user_id) VALUES (?, ?)').run(raffleId, interaction.user.id);
-    require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client);
+    await db.prepare('INSERT INTO raffle_entries (raffle_id, user_id) VALUES (?, ?)').run(raffleId, interaction.user.id);
+    await require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client);
     const { ticketLine } = require('../commands/raffle');
     const ticketNote = raffle.ticket_gp > 0 ? `\n${ticketLine(raffle.ticket_gp)}` : '';
     await interaction.reply({ content: `You're entered in **${raffle.title}** (${member.rsn}).${ticketNote}`, flags: 64 });
@@ -85,8 +85,8 @@ async function handleConfirmation(interaction, db) {
 
   if (parsed.action === 'event_cancel') {
     const eventId = parseInt(parsed.targetId, 10);
-    const event = db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(eventId, interaction.guildId);
-    const result = db.prepare('DELETE FROM events WHERE id = ? AND guild_id = ?').run(eventId, interaction.guildId);
+    const event = await db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(eventId, interaction.guildId);
+    const result = await db.prepare('DELETE FROM events WHERE id = ? AND guild_id = ?').run(eventId, interaction.guildId);
     if (result.changes > 0) {
       await interaction.update({ content: `✅ Event #${parsed.targetId} has been cancelled.`, components: [] });
       await audit(interaction.client, interaction.guildId, `Event #${parsed.targetId}${event ? ` (${event.title})` : ''} cancelled by <@${interaction.user.id}>`);
@@ -98,7 +98,7 @@ async function handleConfirmation(interaction, db) {
 
   if (parsed.action === 'sotw_end') {
     const sotwId = parseInt(parsed.targetId, 10);
-    const sotw = db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(sotwId, interaction.guildId);
+    const sotw = await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(sotwId, interaction.guildId);
     if (!sotw) {
       await interaction.update({ content: '❌ SOTW not found or already ended.', components: [] });
       return;
@@ -124,13 +124,13 @@ async function handleBingoReview(interaction, db) {
   }
   const [, bingoId, tileId, userId] = interaction.customId.split(':');
   const approve = interaction.customId.startsWith('bingo_ok:');
-  const card = require('../services/bingo').getBingo(interaction.guildId, Number(bingoId));
-  const tile = require('../services/bingo').tilesOf(Number(bingoId)).find(t => t.id === Number(tileId));
+  const card = await require('../services/bingo').getBingo(interaction.guildId, Number(bingoId));
+  const tile = (await require('../services/bingo').tilesOf(Number(bingoId))).find(t => t.id === Number(tileId));
   if (!card || !tile) return interaction.update({ content: 'Tile gone.', components: [] });
 
   if (approve) {
-    const team = require('../services/bingo').teamOf(card.id, userId);
-    require('../services/bingo').markComplete({
+    const team = await require('../services/bingo').teamOf(card.id, userId);
+    await require('../services/bingo').markComplete({
       bingo: card,
       tile,
       userId,
@@ -144,7 +144,7 @@ async function handleBingoReview(interaction, db) {
     return;
   }
 
-  db.prepare("UPDATE bingo_progress SET status = 'denied' WHERE bingo_id = ? AND tile_id = ? AND user_id = ?")
+  await db.prepare("UPDATE bingo_progress SET status = 'denied' WHERE bingo_id = ? AND tile_id = ? AND user_id = ?")
     .run(Number(bingoId), Number(tileId), userId);
   await interaction.update({ content: `Denied **${tile.label}** for <@${userId}>.`, components: [] });
   await require('../services/live').refreshKind(interaction.client, interaction.guildId, 'bingo', card.id);

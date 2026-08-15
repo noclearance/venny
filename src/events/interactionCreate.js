@@ -36,7 +36,7 @@ module.exports = {
 
       try {
         if (!(await assertCommandAccess(interaction, command))) return;
-        if (interaction.guildId) ensureGuildSettings(interaction.guildId);
+        if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         await command.execute(interaction);
       } catch (err) {
         logFail(`Command ${interaction.commandName}`, err);
@@ -53,7 +53,7 @@ module.exports = {
 
     if (interaction.isMessageContextMenuCommand()) {
       try {
-        if (interaction.guildId) ensureGuildSettings(interaction.guildId);
+        if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         if (interaction.commandName === 'Import as bingo list') {
           const command = require('../commands/bingo');
           await command.executeContext(interaction);
@@ -93,7 +93,7 @@ module.exports = {
 
     if (interaction.isButton()) {
       try {
-        if (interaction.guildId) ensureGuildSettings(interaction.guildId);
+        if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         if (interaction.customId.startsWith('bg:')) {
           await bingoUi.handleBingoComponent(interaction);
           return;

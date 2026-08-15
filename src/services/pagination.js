@@ -44,8 +44,8 @@ async function getPaginatedData(type, guildId, page) {
   const offset = page * ITEMS_PER_PAGE;
 
   if (type === 'members') {
-    const total = db.prepare('SELECT COUNT(*) as count FROM members WHERE guild_id = ?').get(guildId).count;
-    const items = db.prepare('SELECT * FROM members WHERE guild_id = ? ORDER BY rsn ASC LIMIT ? OFFSET ?').all(guildId, ITEMS_PER_PAGE, offset);
+    const total = (await db.prepare('SELECT COUNT(*) as count FROM members WHERE guild_id = ?').get(guildId)).count;
+    const items = await db.prepare('SELECT * FROM members WHERE guild_id = ? ORDER BY rsn ASC LIMIT ? OFFSET ?').all(guildId, ITEMS_PER_PAGE, offset);
     return {
       totalPages: Math.max(1, Math.ceil(total / ITEMS_PER_PAGE)),
       total,
@@ -57,9 +57,9 @@ async function getPaginatedData(type, guildId, page) {
 
   if (type === 'events') {
     const now = new Date().toISOString();
-    const total = db.prepare('SELECT COUNT(*) as count FROM events WHERE guild_id = ? AND event_time > ?').get(guildId, now).count;
-    const items = db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC LIMIT ? OFFSET ?').all(guildId, now, ITEMS_PER_PAGE, offset);
-    const counts = attendanceCounts(db, items.map(e => e.id));
+    const total = (await db.prepare('SELECT COUNT(*) as count FROM events WHERE guild_id = ? AND event_time > ?').get(guildId, now)).count;
+    const items = await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC LIMIT ? OFFSET ?').all(guildId, now, ITEMS_PER_PAGE, offset);
+    const counts = await attendanceCounts(db, items.map(e => e.id));
     return {
       totalPages: Math.max(1, Math.ceil(total / ITEMS_PER_PAGE)),
       total,
@@ -75,8 +75,8 @@ async function getPaginatedData(type, guildId, page) {
   }
 
   if (type === 'raffles') {
-    const total = db.prepare('SELECT COUNT(*) as count FROM raffles WHERE guild_id = ?').get(guildId).count;
-    const items = db.prepare('SELECT * FROM raffles WHERE guild_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(guildId, ITEMS_PER_PAGE, offset);
+    const total = (await db.prepare('SELECT COUNT(*) as count FROM raffles WHERE guild_id = ?').get(guildId)).count;
+    const items = await db.prepare('SELECT * FROM raffles WHERE guild_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(guildId, ITEMS_PER_PAGE, offset);
     return {
       totalPages: Math.max(1, Math.ceil(total / ITEMS_PER_PAGE)),
       total,
@@ -93,11 +93,11 @@ async function getPaginatedData(type, guildId, page) {
   return null;
 }
 
-function attendanceCounts(db, eventIds) {
+async function attendanceCounts(db, eventIds) {
   const map = new Map();
   if (!eventIds.length) return map;
   const placeholders = eventIds.map(() => '?').join(',');
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT event_id, status, COUNT(*) as count
     FROM event_attendance
     WHERE event_id IN (${placeholders})

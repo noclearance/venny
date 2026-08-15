@@ -24,7 +24,7 @@ async function tick(client) {
   const grace = new Date(nowMs - REMIND_GRACE_MS).toISOString();
 
   // Events in the next 15 minutes, plus anything missed in the last 30 minutes
-  const dueEvents = db.prepare(`
+  const dueEvents = await db.prepare(`
     SELECT * FROM events
     WHERE reminder_sent = 0 AND event_time <= ? AND event_time >= ?
     ORDER BY event_time ASC
@@ -34,7 +34,7 @@ async function tick(client) {
     try {
       const channel = await client.channels.fetch(event.channel_id);
       if (!channel) {
-        db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
+        await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
         continue;
       }
 
@@ -43,7 +43,7 @@ async function tick(client) {
       const theme = require('./theme');
       const subs = require('./subscriptions');
       const category = event.category || 'general';
-      const mentionStr = subs.buildMentionString(event.guild_id, category);
+      const mentionStr = await subs.buildMentionString(event.guild_id, category);
 
       const economy = require('./economy');
       await channel.send({
@@ -62,13 +62,13 @@ async function tick(client) {
         allowedMentions: { parse: ['users', 'roles'] },
       });
 
-      db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
+      await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
     } catch (err) {
       console.error(`Failed to send reminder for event ${event.id}:`, err.message);
     }
   }
 
-  const passedRecurring = db.prepare(`
+  const passedRecurring = await db.prepare(`
     SELECT * FROM events
     WHERE next_created = 0
       AND recurrence IN ('weekly', 'monthly')
@@ -88,7 +88,7 @@ async function tick(client) {
         }
       } while (newDate.getTime() <= nowMs);
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, parent_event_id, category)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -103,14 +103,14 @@ async function tick(client) {
         event.category || 'general'
       );
 
-      db.prepare('UPDATE events SET next_created = 1 WHERE id = ?').run(event.id);
+      await db.prepare('UPDATE events SET next_created = 1 WHERE id = ?').run(event.id);
       console.log(`Created next recurring event for: ${event.title} → ${newDate.toISOString()}`);
     } catch (err) {
       console.error(`Failed to create recurring event for ${event.id}:`, err.message);
     }
   }
 
-  const endedSotw = db.prepare(`
+  const endedSotw = await db.prepare(`
     SELECT * FROM sotw
     WHERE ended = 0 AND ends_at <= ?
   `).all(now);
@@ -123,7 +123,7 @@ async function tick(client) {
     }
   }
 
-  const endedPolls = db.prepare(`
+  const endedPolls = await db.prepare(`
     SELECT * FROM polls
     WHERE finalized = 0 AND ends_at <= ?
   `).all(now);
@@ -143,7 +143,7 @@ async function tick(client) {
     console.error('Tracker tick failed:', err.message);
   }
 
-  db.prepare('UPDATE botw SET ended = 1 WHERE ended = 0 AND ends_at <= ?').run(now);
+  await db.prepare('UPDATE botw SET ended = 1 WHERE ended = 0 AND ends_at <= ?').run(now);
 }
 
 async function finalizeSotw(client, sotw) {
@@ -204,15 +204,15 @@ async function finalizeSotw(client, sotw) {
   }
 
   if (winnerRsn) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO sotw_winners (guild_id, sotw_id, skill, winner_rsn, xp_gained, starts_at, ends_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(sotw.guild_id, sotw.id, sotw.skill, winnerRsn, xpGained, sotw.starts_at, sotw.ends_at);
-    const winner = db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(sotw.guild_id, winnerRsn);
-    if (winner) require('./economy').award(sotw.guild_id, winner.user_id, 'sotw_win', client);
+    const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(sotw.guild_id, winnerRsn);
+    if (winner) await require('./economy').award(sotw.guild_id, winner.user_id, 'sotw_win', client);
   }
 
-  db.prepare('UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?').run(winnerRsn, sotw.id);
+  await db.prepare('UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?').run(winnerRsn, sotw.id);
 
   try {
     const sotwQueue = require('./sotwQueue');
@@ -235,13 +235,13 @@ async function finalizePoll(client, poll) {
   try {
     const channel = await client.channels.fetch(poll.channel_id);
     if (!channel) {
-      db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Channel missing', poll.id);
+      await db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Channel missing', poll.id);
       return;
     }
 
     const message = await channel.messages.fetch(poll.message_id);
     if (!message || !message.poll) {
-      db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Poll message missing', poll.id);
+      await db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Poll message missing', poll.id);
       return;
     }
 
@@ -249,13 +249,13 @@ async function finalizePoll(client, poll) {
     const sorted = [...answers.values()].sort((a, b) => b.voteCount - a.voteCount);
 
     if (sorted.length === 0 || sorted[0].voteCount === 0) {
-      db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('No votes', poll.id);
+      await db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('No votes', poll.id);
       await channel.send(`📊 **Poll ended:** ${poll.question}\n\nNo votes were cast.`);
       return;
     }
 
     const winner = sorted[0].text;
-    db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run(winner, poll.id);
+    await db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run(winner, poll.id);
 
     let results = `📊 **Poll Ended: ${poll.question}**\n\n`;
     const medals = ['🥇', '🥈', '🥉'];
@@ -294,7 +294,7 @@ async function finalizePoll(client, poll) {
     await channel.send(results);
   } catch (err) {
     if (isMissingDiscordResource(err)) {
-      db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Unavailable', poll.id);
+      await db.prepare('UPDATE polls SET finalized = 1, winner = ? WHERE id = ?').run('Unavailable', poll.id);
     }
     console.error(`Failed to finalize poll ${poll.id}:`, err.message);
   }

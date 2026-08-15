@@ -81,7 +81,7 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
-    const settings = db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+    const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
 
     const modSubs = ['start', 'end', 'update', 'cancel'];
     if (modSubs.includes(sub) && !isModerator(interaction.member)) {
@@ -136,10 +136,10 @@ module.exports = {
       if (sub === 'standings') {
         const id = interaction.options.getInteger('id');
         sotw = id
-          ? db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ?').get(id, interaction.guildId)
-          : db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+          ? await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ?').get(id, interaction.guildId)
+          : await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       } else {
-        sotw = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+        sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       }
 
       if (!sotw) {
@@ -179,7 +179,7 @@ module.exports = {
             ],
           })],
         });
-        require('../services/live').pin(interaction.guildId, 'sotw', sotw.id, interaction.channelId, reply.id);
+        await require('../services/live').pin(interaction.guildId, 'sotw', sotw.id, interaction.channelId, reply.id);
       } catch (err) {
         await interaction.editReply(`❌ Failed to fetch standings: ${err.message}`);
       }
@@ -190,8 +190,8 @@ module.exports = {
     if (sub === 'end') {
       const id = interaction.options.getInteger('id');
       const sotw = id
-        ? db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(id, interaction.guildId)
-        : db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+        ? await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(id, interaction.guildId)
+        : await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
 
       if (!sotw) {
         return interaction.reply({ content: '❌ No active SOTW found to end.', flags: 64 });
@@ -209,7 +209,7 @@ module.exports = {
 
     // ── History ───────────────────────────────
     if (sub === 'history') {
-      const winners = db.prepare('SELECT * FROM sotw_winners WHERE guild_id = ? ORDER BY id DESC LIMIT 20').all(interaction.guildId);
+      const winners = await db.prepare('SELECT * FROM sotw_winners WHERE guild_id = ? ORDER BY id DESC LIMIT 20').all(interaction.guildId);
 
       if (winners.length === 0) {
         return interaction.reply({ content: 'No SOTW history yet.', flags: 64 });
@@ -234,7 +234,7 @@ module.exports = {
 
     // ── Champions (cumulative win leaderboard) ──
     if (sub === 'champions') {
-      const champions = db.prepare(`
+      const champions = await db.prepare(`
         SELECT winner_rsn, COUNT(*) as wins, SUM(xp_gained) as total_xp
         FROM sotw_winners
         WHERE guild_id = ?
@@ -261,13 +261,13 @@ module.exports = {
 
     // ── Me (personal progress) ───────────────
     if (sub === 'me') {
-      const member = db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
+      const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
 
       if (!member) {
         return interaction.reply({ content: '❌ You need to link your RSN first! Use `/member link rsn:<your_name>`.', flags: 64 });
       }
 
-      const sotw = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
 
       if (!sotw) {
         return interaction.reply({ content: '❌ No active SOTW right now.', flags: 64 });
@@ -329,7 +329,7 @@ module.exports = {
     }
 
     if (sub === 'cancel') {
-      const sotw = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       if (!sotw) {
         return interaction.reply({ content: 'Nothing live to cancel.', flags: 64 });
       }
@@ -340,15 +340,15 @@ module.exports = {
           console.error('WOM delete on cancel:', err.message);
         }
       }
-      db.prepare("UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?").run('Cancelled', sotw.id);
-      db.prepare("UPDATE events SET reminder_sent = 1 WHERE guild_id = ? AND category = 'sotw' AND title LIKE ?").run(interaction.guildId, `%${sotw.skill}%`);
+      await db.prepare("UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?").run('Cancelled', sotw.id);
+      await db.prepare("UPDATE events SET reminder_sent = 1 WHERE guild_id = ? AND category = 'sotw' AND title LIKE ?").run(interaction.guildId, `%${sotw.skill}%`);
       await audit(interaction.client, interaction.guildId, `SOTW #${sotw.id} (${sotw.skill}) cancelled by <@${interaction.user.id}>`);
       return interaction.reply({ content: `SOTW **${sotw.skill}** is off. No winner. Wise Old Man competition removed if I had the code.` });
     }
 
     // ── Update ────────────────────────────────
     if (sub === 'update') {
-      const sotw = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
 
       if (!sotw || !sotw.wom_competition_id) {
         return interaction.reply({ content: '❌ No active WOM-linked SOTW found.', flags: 64 });
@@ -383,7 +383,7 @@ module.exports = {
           return interaction.reply({ content: '❌ You need to specify a skill to queue.', flags: 64 });
         }
         const durationDays = interaction.options.getInteger('duration_days') || 7;
-        const queueId = sotwQueue.addToQueue({
+        const queueId = await sotwQueue.addToQueue({
           guildId: interaction.guildId,
           channelId: interaction.channelId,
           createdBy: interaction.user.id,
@@ -392,7 +392,7 @@ module.exports = {
         });
 
         // Check if there's an active SOTW
-        const active = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(interaction.guildId);
+        const active = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(interaction.guildId);
         if (active) {
           await interaction.reply({ content: `Added **${skill.toUpperCase()}** to the SOTW queue (ID: #${queueId}). It will auto-start when the current SOTW ends.`, flags: 64 });
         } else {
@@ -409,7 +409,7 @@ module.exports = {
       }
 
       if (action === 'list') {
-        const queue = sotwQueue.getQueue(interaction.guildId);
+        const queue = await sotwQueue.getQueue(interaction.guildId);
         if (queue.length === 0) {
           return interaction.reply({ content: 'SOTW queue is empty. Add skills with `/sotw queue action:add skill:<skill>`.', flags: 64 });
         }
@@ -423,7 +423,7 @@ module.exports = {
         if (!queueId) {
           return interaction.reply({ content: '❌ Specify a queue item ID to remove.', flags: 64 });
         }
-        const removed = sotwQueue.removeFromQueue(queueId, interaction.guildId);
+        const removed = await sotwQueue.removeFromQueue(queueId, interaction.guildId);
         if (removed) {
           await interaction.reply({ content: `Removed item #${queueId} from the SOTW queue.`, flags: 64 });
         } else {
@@ -433,7 +433,7 @@ module.exports = {
       }
 
       if (action === 'clear') {
-        const count = sotwQueue.clearQueue(interaction.guildId);
+        const count = await sotwQueue.clearQueue(interaction.guildId);
         await interaction.reply({ content: `Cleared ${count} item${count === 1 ? '' : 's'} from the SOTW queue.`, flags: 64 });
         return;
       }

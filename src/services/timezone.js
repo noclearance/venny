@@ -4,9 +4,9 @@ const { getDb } = require('../db/database');
 
 const EVENT_CATEGORIES = ['general', 'boss', 'pvm', 'skilling', 'social', 'sotw', 'botw', 'raffle'];
 
-function getGuildTimezone(guildId) {
+async function getGuildTimezone(guildId) {
   const db = getDb();
-  const settings = db.prepare('SELECT timezone FROM guild_settings WHERE guild_id = ?').get(guildId);
+  const settings = await db.prepare('SELECT timezone FROM guild_settings WHERE guild_id = ?').get(guildId);
   return settings?.timezone || 'UTC';
 }
 
@@ -18,8 +18,8 @@ function isValidTimezone(tz) {
 
 // Parse a user-provided datetime string in the guild's timezone
 // Returns a JS Date in UTC, or null if parsing fails
-function parseEventDate(datetimeStr, guildId) {
-  const tz = getGuildTimezone(guildId);
+async function parseEventDate(datetimeStr, guildId) {
+  const tz = await getGuildTimezone(guildId);
 
   const formats = [
     'yyyy-MM-dd HH:mm',

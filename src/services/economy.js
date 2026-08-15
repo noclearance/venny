@@ -38,9 +38,9 @@ function payNote(...reasons) {
   return `${lines}\nCheck yours with \`/economy balance\`.`;
 }
 
-function getBalance(guildId, userId) {
+async function getBalance(guildId, userId) {
   const db = getDb();
-  const row = db.prepare('SELECT coins FROM economy_balances WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+  const row = await db.prepare('SELECT coins FROM economy_balances WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
   return row?.coins || 0;
 }
 
@@ -68,24 +68,24 @@ async function tell(client, userId, amount, reason, balance) {
   }
 }
 
-function award(guildId, userId, reason, amount, client) {
+async function award(guildId, userId, reason, amount, client) {
   const maybeClient = asClient(amount) || asClient(client);
   const n = asClient(amount) ? (REWARDS[reason] || 0) : (amount == null ? (REWARDS[reason] || 0) : amount);
-  if (!guildId || !userId || !n) return getBalance(guildId, userId);
+  if (!guildId || !userId || !n) return await getBalance(guildId, userId);
   const db = getDb();
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO economy_balances (guild_id, user_id, coins) VALUES (?, ?, ?)
     ON CONFLICT(guild_id, user_id) DO UPDATE SET coins = coins + excluded.coins
   `).run(guildId, userId, n);
-  db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
-  const balance = getBalance(guildId, userId);
+  await db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
+  const balance = await getBalance(guildId, userId);
   if (maybeClient) tell(maybeClient, userId, n, reason, balance);
   return balance;
 }
 
-function leaderboard(guildId, limit = 15) {
+async function leaderboard(guildId, limit = 15) {
   const db = getDb();
-  return db.prepare('SELECT user_id, coins FROM economy_balances WHERE guild_id = ? AND coins > 0 ORDER BY coins DESC LIMIT ?').all(guildId, limit);
+  return await db.prepare('SELECT user_id, coins FROM economy_balances WHERE guild_id = ? AND coins > 0 ORDER BY coins DESC LIMIT ?').all(guildId, limit);
 }
 
 module.exports = { REWARDS, REWARD_COPY, coins, payRates, payNote, getBalance, award, leaderboard };

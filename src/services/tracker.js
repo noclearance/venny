@@ -9,7 +9,7 @@ let lastLive = 0;
 
 async function tickTracker(client) {
   const db = getDb();
-  const members = db.prepare('SELECT * FROM members ORDER BY id ASC').all();
+  const members = await db.prepare('SELECT * FROM members ORDER BY id ASC').all();
   if (members.length) {
     const member = members[cursor % members.length];
     cursor += 1;
@@ -25,12 +25,12 @@ async function tickTracker(client) {
       console.error(`Goal check ${member.rsn}:`, err.message);
     }
 
-    const card = bingo.activeBingo(member.guild_id);
+    const card = await bingo.activeBingo(member.guild_id);
     if (card && card.status === 'active') {
       try {
         const done = await bingo.autoCheckMember(card, member, client);
         if (done.length) {
-          const settings = db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(member.guild_id);
+          const settings = await db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(member.guild_id);
           const channelId = card.channel_id || settings?.announce_channel || settings?.reminder_channel;
           if (channelId) {
             const channel = await client.channels.fetch(channelId);

@@ -134,7 +134,7 @@ module.exports = {
       const title = interaction.options.getString('name') || 'Clan bingo';
       const sizeOpt = interaction.options.getString('size') || '5';
       const startFrom = interaction.options.getString('start_from') || 'blank';
-      const card = bingo.createBingo({
+      const card = await bingo.createBingo({
         guildId: interaction.guildId,
         title,
         themeName: startFrom === 'blank' ? 'blank' : startFrom,
@@ -145,21 +145,21 @@ module.exports = {
         empty: startFrom === 'blank',
       });
       if (startFrom !== 'blank' && startFrom !== 'previous') {
-        bingo.applyTemplate(card, startFrom);
+        await bingo.applyTemplate(card, startFrom);
       }
-      const fresh = bingo.getBingo(interaction.guildId, card.id);
+      const fresh = await bingo.getBingo(interaction.guildId, card.id);
       const reply = await interaction.reply({
         content: startFrom === 'blank'
           ? 'Draft is open. **Bulk paste** or **Load template**. That is the fast path.'
           : `Draft loaded from **${startFrom}**. Tweak then Publish.`,
-        ...draft.draftPayload(fresh),
+        ...(await draft.draftPayload(fresh)),
         fetchReply: true,
       });
-      bingo.saveMessage(fresh.id, interaction.channelId, reply.id);
+      await bingo.saveMessage(fresh.id, interaction.channelId, reply.id);
       return;
     }
 
-    const card = bingo.getBingo(interaction.guildId, interaction.options.getInteger('id'));
+    const card = await bingo.getBingo(interaction.guildId, interaction.options.getInteger('id'));
     if (!card) {
       return interaction.reply({ content: 'No bingo on the books. `/bingo create`.', flags: 64 });
     }
@@ -170,19 +170,19 @@ module.exports = {
       }
       const which = interaction.options.getString('which');
       if (which === 'previous') {
-        const prev = bingo.lastGuildBoard(interaction.guildId, card.id);
+        const prev = await bingo.lastGuildBoard(interaction.guildId, card.id);
         if (!prev) return interaction.reply({ content: 'No earlier board here.', flags: 64 });
-        const n = bingo.copyTilesFrom(prev.id, card.id, bingo.capacityOf(card));
-        const copied = bingo.getBingo(interaction.guildId, card.id);
-        await interaction.reply({ content: `Copied ${n} tiles from **${prev.title}**.`, ...draft.draftPayload(copied), flags: 64 });
+        const n = await bingo.copyTilesFrom(prev.id, card.id, bingo.capacityOf(card));
+        const copied = await bingo.getBingo(interaction.guildId, card.id);
+        await interaction.reply({ content: `Copied ${n} tiles from **${prev.title}**.`, ...(await draft.draftPayload(copied)), flags: 64 });
         await bingoUi.syncPostedBoard(interaction, copied);
         return;
       }
-      const result = bingo.applyTemplate(card, which);
-      const loaded = bingo.getBingo(interaction.guildId, card.id);
+      const result = await bingo.applyTemplate(card, which);
+      const loaded = await bingo.getBingo(interaction.guildId, card.id);
       await interaction.reply({
         content: result.ok ? `Loaded **${which}** (${result.loaded} tiles).` : result.error,
-        ...draft.draftPayload(loaded),
+        ...(await draft.draftPayload(loaded)),
         flags: 64,
       });
       if (result.ok) await bingoUi.syncPostedBoard(interaction, loaded);
@@ -205,8 +205,8 @@ module.exports = {
       try {
         const msg = await interaction.channel.messages.fetch(messageId);
         const note = await bingoUi.ingestList(interaction, card, msg.content);
-        const imported = bingo.getBingo(interaction.guildId, card.id);
-        await interaction.reply({ content: note, flags: 64, ...draft.draftPayload(imported) });
+        const imported = await bingo.getBingo(interaction.guildId, card.id);
+        await interaction.reply({ content: note, flags: 64, ...(await draft.draftPayload(imported)) });
         await bingoUi.syncPostedBoard(interaction, imported);
         return;
       } catch {
@@ -216,29 +216,29 @@ module.exports = {
 
     if (sub === 'board') {
       if (card.status === 'draft' && isModerator(interaction.member)) {
-        const reply = await interaction.reply({ ...draft.draftPayload(card), fetchReply: true });
-        bingo.saveMessage(card.id, interaction.channelId, reply.id);
+        const reply = await interaction.reply({ ...(await draft.draftPayload(card)), fetchReply: true });
+        await bingo.saveMessage(card.id, interaction.channelId, reply.id);
         return;
       }
-      const reply = await interaction.reply({ ...draft.livePayload(card), fetchReply: true });
+      const reply = await interaction.reply({ ...(await draft.livePayload(card)), fetchReply: true });
       if (isModerator(interaction.member) && card.status === 'active') {
-        live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, reply.id);
-        bingo.saveMessage(card.id, interaction.channelId, reply.id);
+        await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, reply.id);
+        await bingo.saveMessage(card.id, interaction.channelId, reply.id);
       }
       return;
     }
 
     if (sub === 'start') {
       await interaction.deferReply();
-      db.prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
+      await db.prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
       await bingo.snapshotBaselines(card, interaction.guildId);
-      const fresh = bingo.getBingo(interaction.guildId, card.id);
+      const fresh = await bingo.getBingo(interaction.guildId, card.id);
       const msg = await interaction.editReply({
         content: 'Board is live. **Claim a tile** on the board, or `/bingo submit`. WOM tiles stamp themselves.',
-        ...draft.livePayload(fresh),
+        ...(await draft.livePayload(fresh)),
       });
-      live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
-      bingo.saveMessage(card.id, interaction.channelId, msg.id);
+      await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
+      await bingo.saveMessage(card.id, interaction.channelId, msg.id);
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'raffle',
         title: `${fresh.title} is live`,
@@ -251,19 +251,19 @@ module.exports = {
     }
 
     if (sub === 'pause') {
-      db.prepare("UPDATE bingo_events SET status = 'paused' WHERE id = ?").run(card.id);
+      await db.prepare("UPDATE bingo_events SET status = 'paused' WHERE id = ?").run(card.id);
       const reply = await interaction.reply({
         content: 'Paused. You can edit again.',
-        ...draft.draftPayload(bingo.getBingo(interaction.guildId, card.id)),
+        ...(await draft.draftPayload(await bingo.getBingo(interaction.guildId, card.id))),
         fetchReply: true,
       });
-      bingo.saveMessage(card.id, interaction.channelId, reply.id);
+      await bingo.saveMessage(card.id, interaction.channelId, reply.id);
       return;
     }
 
     if (sub === 'end') {
-      db.prepare("UPDATE bingo_events SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(card.id);
-      return interaction.reply({ embeds: [bingo.boardEmbed(bingo.getBingo(interaction.guildId, card.id))] });
+      await db.prepare("UPDATE bingo_events SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(card.id);
+      return interaction.reply({ embeds: [await bingo.boardEmbed(await bingo.getBingo(interaction.guildId, card.id))] });
     }
 
     if (sub === 'tile') {
@@ -273,28 +273,28 @@ module.exports = {
       const slot = interaction.options.getInteger('slot') - 1;
       const label = interaction.options.getString('label');
       const inferred = inferFromLabel(label);
-      bingo.setTile(card.id, slot, {
+      await bingo.setTile(card.id, slot, {
         label,
         verifyMode: resolveMode(interaction.options.getString('mode')) || inferred.verify_mode,
         metric: interaction.options.getString('metric') || inferred.metric,
         amount: interaction.options.getInteger('amount') || inferred.amount || 0,
       });
-      const updated = bingo.getBingo(interaction.guildId, card.id);
-      await interaction.reply({ content: `Updated #${slot + 1}.`, flags: 64, ...draft.draftPayload(updated) });
+      const updated = await bingo.getBingo(interaction.guildId, card.id);
+      await interaction.reply({ content: `Updated #${slot + 1}.`, flags: 64, ...(await draft.draftPayload(updated)) });
       await bingoUi.syncPostedBoard(interaction, updated);
       return;
     }
 
     if (sub === 'submit') {
       const slot = interaction.options.getInteger('slot') - 1;
-      const tile = bingo.tilesOf(card.id).find(t => t.slot === slot);
+      const tile = (await bingo.tilesOf(card.id)).find(t => t.slot === slot);
       if (!tile) return interaction.reply({ content: 'No tile in that slot.', flags: 64 });
       return bingoUi.handlePlayerClaim(interaction, card, tile, interaction.options.getString('proof'));
     }
 
     if (sub === 'verify') {
       const slot = interaction.options.getInteger('slot') - 1;
-      const tile = bingo.tilesOf(card.id).find(t => t.slot === slot);
+      const tile = (await bingo.tilesOf(card.id)).find(t => t.slot === slot);
       if (!tile) return interaction.reply({ content: 'No tile in that slot.', flags: 64 });
       if (card.status !== 'active') return interaction.reply({ content: 'Bingo is not live.', flags: 64 });
 
@@ -305,7 +305,7 @@ module.exports = {
       }
 
       if (approve) {
-        bingo.claimTile({
+        await bingo.claimTile({
           card,
           tile,
           userId: target.id,
@@ -314,7 +314,7 @@ module.exports = {
           status: 'complete',
           client: interaction.client,
         });
-        await interaction.reply({ content: `🟩 Stamped **${tile.label}** for ${target}.`, ...draft.livePayload(bingo.getBingo(interaction.guildId, card.id)) });
+        await interaction.reply({ content: `🟩 Stamped **${tile.label}** for ${target}.`, ...(await draft.livePayload(await bingo.getBingo(interaction.guildId, card.id))) });
         await bingoUi.syncPostedBoard(interaction, card);
         return;
       }
@@ -323,7 +323,7 @@ module.exports = {
         return bingoUi.handlePlayerClaim(interaction, card, tile, interaction.options.getString('proof'));
       }
 
-      bingo.claimTile({
+      await bingo.claimTile({
         card,
         tile,
         userId: target.id,
@@ -339,7 +339,7 @@ module.exports = {
     if (sub === 'team') {
       const action = interaction.options.getString('action');
       if (action === 'list' || !action) {
-        const teams = bingo.listTeams(card.id);
+        const teams = await bingo.listTeams(card.id);
         return interaction.reply({
           embeds: [theme.embed('raffle', {
             title: `Teams · ${card.title}`,
@@ -354,8 +354,8 @@ module.exports = {
         }
         const name = interaction.options.getString('name');
         if (!name) return interaction.reply({ content: 'Give it a name.', flags: 64 });
-        const id = bingo.createTeam(card.id, name, interaction.user.id);
-        bingo.joinTeam(id, interaction.user.id);
+        const id = await bingo.createTeam(card.id, name, interaction.user.id);
+        await bingo.joinTeam(id, interaction.user.id);
         return interaction.reply({ content: `Team **${name}** is #${id}. You are on it.`, flags: 64 });
       }
       if (action === 'join') {
@@ -363,17 +363,17 @@ module.exports = {
         const name = interaction.options.getString('name');
         let teamId = id;
         if (!teamId && name) {
-          const match = bingo.listTeams(card.id).find(t => t.name.toLowerCase() === name.toLowerCase());
+          const match = (await bingo.listTeams(card.id)).find(t => t.name.toLowerCase() === name.toLowerCase());
           teamId = match?.id;
         }
         if (!teamId) return interaction.reply({ content: 'Need a team number or name.', flags: 64 });
-        const team = bingo.joinTeam(teamId, interaction.user.id);
+        const team = await bingo.joinTeam(teamId, interaction.user.id);
         return interaction.reply({ content: team ? `You're on **${team.name}**.` : 'No such team.', flags: 64 });
       }
     }
 
     if (sub === 'leaderboard') {
-      const teams = bingo.listTeams(card.id).sort((a, b) => b.completed - a.completed);
+      const teams = (await bingo.listTeams(card.id)).sort((a, b) => b.completed - a.completed);
       return interaction.reply({
         embeds: [theme.embed('raffle', {
           title: `Bingo standings · ${card.title}`,
@@ -393,8 +393,8 @@ module.exports = {
       return respond(interaction, filterChoices(MODE_SUGGESTIONS, focused.value, m => m));
     }
     if (focused.name === 'slot') {
-      const card = bingo.getBingo(interaction.guildId);
-      const tiles = card ? bingo.tilesOf(card.id) : [];
+      const card = await bingo.getBingo(interaction.guildId);
+      const tiles = card ? await bingo.tilesOf(card.id) : [];
       return respond(interaction, filterChoices(tiles, focused.value, t => ({
         name: `#${t.slot + 1} ${t.label}`,
         value: t.slot + 1,
@@ -407,14 +407,14 @@ module.exports = {
     if (!isModerator(interaction.member)) {
       return interaction.reply({ content: 'Mods import boards.', flags: 64 });
     }
-    const card = bingo.activeBingo(interaction.guildId);
+    const card = await bingo.activeBingo(interaction.guildId);
     if (!card || !bingo.isEditable(card)) {
       return interaction.reply({ content: 'Open a draft with `/bingo create` first.', flags: 64 });
     }
     const text = interaction.targetMessage?.content || '';
     const note = await bingoUi.ingestList(interaction, card, text);
-    const imported = bingo.getBingo(interaction.guildId, card.id);
-    await interaction.reply({ content: note, flags: 64, ...draft.draftPayload(imported) });
+    const imported = await bingo.getBingo(interaction.guildId, card.id);
+    await interaction.reply({ content: note, flags: 64, ...(await draft.draftPayload(imported)) });
     await bingoUi.syncPostedBoard(interaction, imported);
   },
 };

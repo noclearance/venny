@@ -5,9 +5,9 @@ const wom = require('./wom');
 
 async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 7, title = null }) {
   const db = getDb();
-  const settings = db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(guildId);
+  const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(guildId);
 
-  const active = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
+  const active = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
   if (active) {
     return { success: false, error: `There's already an active SOTW (#${active.id}: ${active.skill}). End it first.` };
   }
@@ -37,7 +37,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     }
   }
 
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO sotw (guild_id, skill, starts_at, ends_at, wom_competition_id, channel_id, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(guildId, skill, startsAt, endsAt, womCompetitionId, channelId, createdBy);
@@ -78,7 +78,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   ].join('\n');
 
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category)
       VALUES (?, ?, ?, ?, ?, ?, 'none', 'sotw')
     `).run(

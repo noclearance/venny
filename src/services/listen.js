@@ -16,11 +16,11 @@ async function snapshot(guildId) {
   const db = getDb();
   const now = new Date().toISOString();
   return {
-    sotw: db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(guildId),
-    event: db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(guildId, now),
-    raffle: db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(guildId),
-    queue: sotwQueue.getQueue(guildId),
-    bingo: require('./bingo').activeBingo(guildId),
+    sotw: await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(guildId),
+    event: await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(guildId, now),
+    raffle: await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(guildId),
+    queue: await sotwQueue.getQueue(guildId),
+    bingo: await require('./bingo').activeBingo(guildId),
   };
 }
 
@@ -61,11 +61,11 @@ async function answerMention(message) {
   }
 
   if (looksLike(asked, ['bingo'])) {
-    const card = data.bingo || require('./bingo').activeBingo(message.guildId);
+    const card = data.bingo || await require('./bingo').activeBingo(message.guildId);
     if (!card) {
       return message.reply({ embeds: [theme.embed('raffle', { title: 'Bingo', description: 'No board running. A mod can `/bingo create`.' })] });
     }
-    return message.reply({ embeds: [require('./bingo').boardEmbed(card)] });
+    return message.reply({ embeds: [await require('./bingo').boardEmbed(card)] });
   }
 
   if (looksLike(asked, ['raffle', 'giveaway'])) {

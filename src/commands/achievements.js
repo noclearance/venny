@@ -13,7 +13,7 @@ module.exports = {
 
   async execute(interaction) {
     const target = interaction.options.getUser('user');
-    const rows = tracker.recent(interaction.guildId, target?.id || null, 15);
+    const rows = await tracker.recent(interaction.guildId, target?.id || null, 15);
     if (!rows.length) {
       return interaction.reply({
         embeds: [theme.embed('muted', {

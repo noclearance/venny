@@ -12,11 +12,11 @@ module.exports = {
     const pending = bingoUi.takePendingImport(message.author.id);
     if (pending && pending.guildId === message.guildId) {
       try {
-        const card = bingo.getBingo(message.guildId, pending.boardId);
+        const card = await bingo.getBingo(message.guildId, pending.boardId);
         if (card && bingo.isEditable(card)) {
           const note = await bingoUi.ingestList({ guildId: message.guildId }, card, message.content);
-          const fresh = bingo.getBingo(message.guildId, card.id);
-          await message.reply({ content: note, ...draft.draftPayload(fresh) });
+          const fresh = await bingo.getBingo(message.guildId, card.id);
+          await message.reply({ content: note, ...(await draft.draftPayload(fresh)) });
           await bingoUi.syncPostedBoard({ client: message.client, guildId: message.guildId }, fresh);
         }
       } catch (err) {

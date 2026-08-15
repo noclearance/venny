@@ -13,9 +13,9 @@ function buildRsvpRow(eventId) {
   );
 }
 
-function getAttendance(eventId) {
+async function getAttendance(eventId) {
   const db = getDb();
-  const rows = db.prepare('SELECT user_id, status FROM event_attendance WHERE event_id = ?').all(eventId);
+  const rows = await db.prepare('SELECT user_id, status FROM event_attendance WHERE event_id = ?').all(eventId);
   const grouped = { yes: [], maybe: [], no: [] };
   for (const row of rows) {
     if (grouped[row.status]) grouped[row.status].push(row.user_id);
@@ -61,7 +61,7 @@ async function updateEventMessage(client, event) {
     const channel = await client.channels.fetch(channelId);
     if (!channel) return;
     const message = await channel.messages.fetch(event.message_id);
-    const attendance = getAttendance(event.id);
+    const attendance = await getAttendance(event.id);
     await message.edit({
       content: null,
       embeds: [buildEventContent(event, attendance)],
@@ -82,13 +82,13 @@ async function handleRsvp(interaction) {
     return interaction.reply({ content: 'Invalid RSVP button.', flags: 64 });
   }
 
-  const event = db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(eventId, interaction.guildId);
+  const event = await db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(eventId, interaction.guildId);
   if (!event) {
     return interaction.reply({ content: 'That event no longer exists.', flags: 64 });
   }
 
-  const prior = db.prepare('SELECT status FROM event_attendance WHERE event_id = ? AND user_id = ?').get(eventId, interaction.user.id);
-  db.prepare(`
+  const prior = await db.prepare('SELECT status FROM event_attendance WHERE event_id = ? AND user_id = ?').get(eventId, interaction.user.id);
+  await db.prepare(`
     INSERT INTO event_attendance (event_id, user_id, status, updated_at)
     VALUES (?, ?, ?, datetime('now'))
     ON CONFLICT(event_id, user_id) DO UPDATE SET status = excluded.status, updated_at = datetime('now')
@@ -96,7 +96,7 @@ async function handleRsvp(interaction) {
 
   await updateEventMessage(interaction.client, event);
   if (status === 'yes' && prior?.status !== 'yes') {
-    require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client);
+    await require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client);
   }
 
   await interaction.reply({ content: `${LABELS[status]} · **${event.title}**`, flags: 64 });

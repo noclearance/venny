@@ -20,7 +20,7 @@ module.exports = {
       return interaction.reply({ content: 'Mods export the books.', flags: 64 });
     }
     const type = interaction.options.getString('type');
-    const file = asAttachment(interaction.guildId, type);
+    const file = await asAttachment(interaction.guildId, type);
     await interaction.reply({
       content: `Here's **${type}**. Open in Google Sheets → File → Import.`,
       files: [file],

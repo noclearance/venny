@@ -68,7 +68,7 @@ module.exports = {
       const weightMode = interaction.options.getString('weight_mode') || 'none';
       const ticketGp = interaction.options.getInteger('ticket_gp') ?? DEFAULT_TICKET_GP;
 
-      const result = db.prepare(`
+      const result = await db.prepare(`
         INSERT INTO raffles (guild_id, title, description, channel_id, created_by, weight_mode, ticket_gp)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(interaction.guildId, title, description, interaction.channelId, interaction.user.id, weightMode, ticketGp);
@@ -122,13 +122,13 @@ module.exports = {
 
     if (sub === 'entries') {
       const id = interaction.options.getInteger('id');
-      const raffle = db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
 
       if (!raffle) {
         return interaction.reply({ content: `❌ Raffle #${id} not found.`, flags: 64 });
       }
 
-      const count = db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
+      const count = await db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
 
       await interaction.reply({ content: `**${raffle.title}** has **${count.count}** entr${count.count === 1 ? 'y' : 'ies'}.${raffle.drawn ? ' (Already drawn)' : ''}`, flags: 64 });
       return;
@@ -136,7 +136,7 @@ module.exports = {
 
     if (sub === 'draw') {
       const id = interaction.options.getInteger('id');
-      const raffle = db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+      const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
 
       if (!raffle) {
         return interaction.reply({ content: `❌ Raffle #${id} not found.`, flags: 64 });
@@ -146,7 +146,7 @@ module.exports = {
         return interaction.reply({ content: `❌ Raffle #${id} has already been drawn. Winner: <@${raffle.winner_id}>`, flags: 64 });
       }
 
-      const entries = db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(id);
+      const entries = await db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(id);
 
       if (entries.length === 0) {
         return interaction.reply({ content: `❌ Raffle #${id} has no entries yet.`, flags: 64 });
@@ -156,12 +156,13 @@ module.exports = {
       let weightInfo = '';
 
       if (raffle.weight_mode && raffle.weight_mode !== 'none') {
-        const weights = entries.map(entry => {
+        const weights = [];
+        for (const entry of entries) {
           let weight = 1;
           let reason = 'base';
 
           if (raffle.weight_mode === 'sotw' || raffle.weight_mode === 'activity') {
-            const sotwCount = db.prepare(`
+            const sotwCount = await db.prepare(`
               SELECT COUNT(*) as count FROM sotw_winners
               WHERE guild_id = ? AND winner_rsn IN (
                 SELECT rsn FROM members WHERE guild_id = ? AND user_id = ?
@@ -173,7 +174,7 @@ module.exports = {
           }
 
           if (raffle.weight_mode === 'attendance' || raffle.weight_mode === 'activity') {
-            const attendanceCount = db.prepare(`
+            const attendanceCount = await db.prepare(`
               SELECT COUNT(*) as count
               FROM event_attendance ea
               JOIN events e ON e.id = ea.event_id
@@ -184,8 +185,8 @@ module.exports = {
             if (attParticipation > 0) reason += (reason !== 'base' ? ', ' : '') + `${attParticipation} events attended`;
           }
 
-          return { ...entry, weight: Math.min(weight, 10), reason };
-        });
+          weights.push({ ...entry, weight: Math.min(weight, 10), reason });
+        }
 
         const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
         let random = Math.random() * totalWeight;
@@ -203,8 +204,8 @@ module.exports = {
         winner = entries[Math.floor(Math.random() * entries.length)];
       }
 
-      db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ?').run(winner.user_id, id);
-      require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win', interaction.client);
+      await db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ?').run(winner.user_id, id);
+      await require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win', interaction.client);
 
       const theme = require('../services/theme');
       const drawMsg = await interaction.reply({
@@ -244,12 +245,12 @@ module.exports = {
       const targetUser = interaction.options.getUser('user');
 
       if (targetUser) {
-        const wins = db.prepare(`
+        const wins = await db.prepare(`
           SELECT * FROM raffles WHERE guild_id = ? AND winner_id = ? AND drawn = 1
           ORDER BY created_at DESC
         `).all(interaction.guildId, targetUser.id);
 
-        const entries = db.prepare(`
+        const entries = await db.prepare(`
           SELECT COUNT(*) as count FROM raffle_entries re
           JOIN raffles r ON r.id = re.raffle_id
           WHERE r.guild_id = ? AND re.user_id = ?
@@ -271,7 +272,7 @@ module.exports = {
 
         await interaction.reply({ content: response, flags: 64 });
       } else {
-        const leaderboard = db.prepare(`
+        const leaderboard = await db.prepare(`
           SELECT winner_id, COUNT(*) as wins
           FROM raffles
           WHERE guild_id = ? AND drawn = 1
@@ -302,8 +303,8 @@ module.exports = {
     const db = getDb();
     const sub = interaction.options.getSubcommand();
     const rows = sub === 'draw'
-      ? db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC LIMIT 25').all(interaction.guildId)
-      : db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? ORDER BY id DESC LIMIT 25').all(interaction.guildId);
+      ? await db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC LIMIT 25').all(interaction.guildId)
+      : await db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? ORDER BY id DESC LIMIT 25').all(interaction.guildId);
 
     const focused = interaction.options.getFocused(true);
     await respond(interaction, filterChoices(rows, focused.value, r => ({

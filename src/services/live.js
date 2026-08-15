@@ -3,16 +3,16 @@ const theme = require('./theme');
 const bingo = require('./bingo');
 const wom = require('./wom');
 
-function pin(guildId, kind, refId, channelId, messageId) {
-  getDb().prepare(`
+async function pin(guildId, kind, refId, channelId, messageId) {
+  await getDb().prepare(`
     INSERT INTO live_embeds (guild_id, kind, ref_id, channel_id, message_id)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(guild_id, kind, ref_id) DO UPDATE SET channel_id = excluded.channel_id, message_id = excluded.message_id
   `).run(guildId, kind, String(refId || '0'), channelId, messageId);
 }
 
-function drop(row, reason) {
-  getDb().prepare('DELETE FROM live_embeds WHERE id = ?').run(row.id);
+async function drop(row, reason) {
+  await getDb().prepare('DELETE FROM live_embeds WHERE id = ?').run(row.id);
   console.warn(`Stopped updating ${row.kind} — ${reason}. Run the command again in a channel the bot can post in.`);
 }
 
@@ -23,34 +23,34 @@ function isDead(err) {
 }
 
 async function refreshBingo(client, row) {
-  const event = bingo.getBingo(row.guild_id, Number(row.ref_id));
+  const event = await bingo.getBingo(row.guild_id, Number(row.ref_id));
   if (!event || event.status === 'ended' || event.status === 'archived') {
-    drop(row, 'board is closed');
+    await drop(row, 'board is closed');
     return;
   }
   const channel = await client.channels.fetch(row.channel_id);
   const message = await channel.messages.fetch(row.message_id);
   const draft = require('./bingoDraft');
-  await message.edit(draft.livePayload(event));
+  await message.edit(await draft.livePayload(event));
 }
 
 async function refreshKind(client, guildId, kind, refId) {
-  const row = getDb().prepare('SELECT * FROM live_embeds WHERE guild_id = ? AND kind = ? AND ref_id = ?')
+  const row = await getDb().prepare('SELECT * FROM live_embeds WHERE guild_id = ? AND kind = ? AND ref_id = ?')
     .get(guildId, kind, String(refId));
   if (!row) return;
   try {
     if (kind === 'bingo') await refreshBingo(client, row);
   } catch (err) {
-    if (isDead(err)) drop(row, err.message);
+    if (isDead(err)) await drop(row, err.message);
     else console.error(`Live embed ${row.kind}#${row.ref_id} failed:`, err.message);
   }
 }
 
 async function refreshSotw(client, row) {
   const db = getDb();
-  const sotw = db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(Number(row.ref_id), row.guild_id);
+  const sotw = await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(Number(row.ref_id), row.guild_id);
   if (!sotw?.wom_competition_id) {
-    drop(row, 'SOTW ended');
+    await drop(row, 'SOTW ended');
     return;
   }
   const details = await wom.getCompetitionDetails(sotw.wom_competition_id);
@@ -76,10 +76,10 @@ async function refreshDashboard(client, row) {
   const message = await channel.messages.fetch(row.message_id);
   const db = getDb();
   const now = new Date().toISOString();
-  const sotw = db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(row.guild_id);
-  const event = db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(row.guild_id, now);
-  const raffle = db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(row.guild_id);
-  const card = bingo.activeBingo(row.guild_id);
+  const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(row.guild_id);
+  const event = await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(row.guild_id, now);
+  const raffle = await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(row.guild_id);
+  const card = await bingo.activeBingo(row.guild_id);
   await message.edit({
     embeds: [theme.embed('brand', {
       title: 'Clan dashboard',
@@ -95,14 +95,14 @@ async function refreshDashboard(client, row) {
 }
 
 async function refreshAll(client) {
-  const rows = getDb().prepare('SELECT * FROM live_embeds').all();
+  const rows = await getDb().prepare('SELECT * FROM live_embeds').all();
   for (const row of rows) {
     try {
       if (row.kind === 'bingo') await refreshBingo(client, row);
       else if (row.kind === 'sotw') await refreshSotw(client, row);
       else if (row.kind === 'dashboard') await refreshDashboard(client, row);
     } catch (err) {
-      if (isDead(err)) drop(row, err.message);
+      if (isDead(err)) await drop(row, err.message);
       else console.error(`Live embed ${row.kind}#${row.ref_id} failed:`, err.message);
     }
   }

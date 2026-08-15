@@ -16,7 +16,7 @@ async function broadcast(client, guildId, {
   mention,
 } = {}) {
   if (!client || !guildId) return null;
-  const settings = getDb().prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
+  const settings = await getDb().prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
   const channelId = settings?.announce_channel || settings?.reminder_channel;
   if (!channelId) return null;
   if (sourceChannelId && String(sourceChannelId) === String(channelId)) return null;
@@ -40,7 +40,7 @@ async function broadcast(client, guildId, {
   } catch (err) {
     console.warn(`Announce channel failed: ${err.message}`);
     if (/Missing Access|Unknown Channel|Missing Permissions/i.test(err.message || '')) {
-      getDb().prepare('UPDATE guild_settings SET announce_channel = NULL WHERE guild_id = ?').run(guildId);
+      await getDb().prepare('UPDATE guild_settings SET announce_channel = NULL WHERE guild_id = ?').run(guildId);
     }
     return null;
   }

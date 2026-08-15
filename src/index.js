@@ -26,8 +26,9 @@ function validateEnv() {
   }
 }
 
+async function boot() {
 validateEnv();
-initDb();
+await initDb();
 
 const intents = [
   GatewayIntentBits.Guilds,
@@ -69,8 +70,14 @@ registerCommands().catch(err => {
   console.error('The bot will still start. Run `npm run register` after fixing CLIENT_ID / DISCORD_TOKEN.');
 });
 
-client.login(process.env.DISCORD_TOKEN).catch(err => {
-  console.error('❌ Discord login failed:', err.message);
-  console.error('Check DISCORD_TOKEN in .env and that the bot is invited to your server.');
+  client.login(process.env.DISCORD_TOKEN).catch(err => {
+    console.error('❌ Discord login failed:', err.message);
+    console.error('Check DISCORD_TOKEN in .env and that the bot is invited to your server.');
+    process.exit(1);
+  });
+}
+
+boot().catch(err => {
+  console.error('Startup failed:', err);
   process.exit(1);
 });

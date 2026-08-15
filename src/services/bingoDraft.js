@@ -19,10 +19,10 @@ function badge(status) {
   return String(status || '').toUpperCase();
 }
 
-function draftEmbed(card) {
-  const tiles = bingo.tilesOf(card.id);
+async function draftEmbed(card) {
+  const tiles = await bingo.tilesOf(card.id);
   const max = bingo.capacityOf(card);
-  const { grid, list } = bingo.boardText(card);
+  const { grid, list } = await bingo.boardText(card);
   const layout = card.layout === 'list' ? 'list' : `${card.size}×${card.size}`;
   const visual = card.layout === 'list' ? list : `${grid}\n\n${list}`;
   return theme.embed('raffle', {
@@ -69,8 +69,8 @@ function templateSelect(cardId) {
   );
 }
 
-function tileSelect(card) {
-  const tiles = bingo.tilesOf(card.id);
+async function tileSelect(card) {
+  const tiles = await bingo.tilesOf(card.id);
   if (!tiles.length) return null;
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -149,9 +149,9 @@ function swapModal(cardId) {
     );
 }
 
-function draftPayload(card) {
+async function draftPayload(card) {
   return {
-    embeds: [draftEmbed(card)],
+    embeds: [await draftEmbed(card)],
     components: bingo.isEditable(card) || card.status === 'draft' ? draftComponents(card) : [],
   };
 }
@@ -167,17 +167,17 @@ function liveComponents(card) {
   ];
 }
 
-function livePayload(card) {
+async function livePayload(card) {
   return {
-    embeds: [bingo.boardEmbed(card)],
+    embeds: [await bingo.boardEmbed(card)],
     components: liveComponents(card),
   };
 }
 
-function claimSelect(card, userId) {
-  const tiles = bingo.tilesOf(card.id);
+async function claimSelect(card, userId) {
+  const tiles = await bingo.tilesOf(card.id);
   if (!tiles.length) return null;
-  const progress = new Map(bingo.progressOf(card.id, userId).map(p => [p.tile_id, p.status]));
+  const progress = new Map((await bingo.progressOf(card.id, userId)).map(p => [p.tile_id, p.status]));
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`bg:csel:${card.id}`)

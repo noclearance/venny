@@ -3,30 +3,30 @@ const { loadPlayer } = require('../osrs/snapshot');
 const { award } = require('./economy');
 const theme = require('./theme');
 
-function addXpGoal(guildId, userId, amount) {
-  return getDb().prepare(`
+async function addXpGoal(guildId, userId, amount) {
+  return (await getDb().prepare(`
     INSERT INTO xp_goals (guild_id, user_id, kind, skill, target) VALUES (?, ?, 'xp', 'overall', ?)
-  `).run(guildId, userId, amount).lastInsertRowid;
+  `).run(guildId, userId, amount)).lastInsertRowid;
 }
 
-function addLevelGoal(guildId, userId, skill, level) {
-  return getDb().prepare(`
+async function addLevelGoal(guildId, userId, skill, level) {
+  return (await getDb().prepare(`
     INSERT INTO xp_goals (guild_id, user_id, kind, skill, target) VALUES (?, ?, 'level', ?, ?)
-  `).run(guildId, userId, skill, level).lastInsertRowid;
+  `).run(guildId, userId, skill, level)).lastInsertRowid;
 }
 
-function addKcGoal(guildId, userId, boss, amount) {
-  return getDb().prepare(`
+async function addKcGoal(guildId, userId, boss, amount) {
+  return (await getDb().prepare(`
     INSERT INTO xp_goals (guild_id, user_id, kind, skill, target) VALUES (?, ?, 'kc', ?, ?)
-  `).run(guildId, userId, boss, amount).lastInsertRowid;
+  `).run(guildId, userId, boss, amount)).lastInsertRowid;
 }
 
-function listGoals(guildId, userId) {
-  return getDb().prepare('SELECT * FROM xp_goals WHERE guild_id = ? AND user_id = ? AND reached = 0 ORDER BY id ASC').all(guildId, userId);
+async function listGoals(guildId, userId) {
+  return await getDb().prepare('SELECT * FROM xp_goals WHERE guild_id = ? AND user_id = ? AND reached = 0 ORDER BY id ASC').all(guildId, userId);
 }
 
-function clearGoals(guildId, userId) {
-  return getDb().prepare('UPDATE xp_goals SET reached = 1, reached_at = datetime(\'now\') WHERE guild_id = ? AND user_id = ? AND reached = 0').run(guildId, userId).changes;
+async function clearGoals(guildId, userId) {
+  return (await getDb().prepare('UPDATE xp_goals SET reached = 1, reached_at = datetime(\'now\') WHERE guild_id = ? AND user_id = ? AND reached = 0').run(guildId, userId)).changes;
 }
 
 function currentValue(parsed, goal) {
@@ -40,7 +40,7 @@ function currentValue(parsed, goal) {
 }
 
 async function checkMember(client, guildId, member) {
-  const open = listGoals(guildId, member.user_id);
+  const open = await listGoals(guildId, member.user_id);
   if (!open.length) return [];
   const parsed = await loadPlayer(member.rsn);
   const hit = [];
@@ -48,13 +48,13 @@ async function checkMember(client, guildId, member) {
   for (const goal of open) {
     const now = currentValue(parsed, goal);
     if (now >= goal.target) {
-      db.prepare('UPDATE xp_goals SET reached = 1, reached_at = datetime(\'now\') WHERE id = ?').run(goal.id);
-      award(guildId, member.user_id, 'goal', client);
+      await db.prepare('UPDATE xp_goals SET reached = 1, reached_at = datetime(\'now\') WHERE id = ?').run(goal.id);
+      await award(guildId, member.user_id, 'goal', client);
       hit.push({ ...goal, now });
     }
   }
   if (hit.length) {
-    const settings = db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
+    const settings = await db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
     const channelId = settings?.announce_channel || settings?.reminder_channel;
     if (channelId) {
       try {

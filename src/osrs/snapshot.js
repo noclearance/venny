@@ -85,18 +85,18 @@ async function loadPlayer(rsn, { refresh = false } = {}) {
   return parsePlayer(details);
 }
 
-function cacheProfile(guildId, userId, rsn, parsed) {
+async function cacheProfile(guildId, userId, rsn, parsed) {
   const db = getDb();
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO profile_cache (guild_id, user_id, rsn, payload, fetched_at)
     VALUES (?, ?, ?, ?, datetime('now'))
     ON CONFLICT(guild_id, user_id) DO UPDATE SET rsn = excluded.rsn, payload = excluded.payload, fetched_at = excluded.fetched_at
   `).run(guildId, userId, rsn, JSON.stringify(parsed));
 }
 
-function readCache(guildId, userId) {
+async function readCache(guildId, userId) {
   const db = getDb();
-  const row = db.prepare('SELECT * FROM profile_cache WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+  const row = await db.prepare('SELECT * FROM profile_cache WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
   if (!row) return null;
   try {
     return { ...JSON.parse(row.payload), cachedAt: row.fetched_at };
