@@ -4,9 +4,15 @@ const { DatabaseSync } = require('node:sqlite');
 
 const DEFAULT_DB_PATH = path.join(__dirname, '..', '..', 'data.db');
 
+function onRender() {
+  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID);
+}
+
 function resolveDbPath() {
   const fromEnv = (process.env.DB_PATH || '').trim();
-  return fromEnv || DEFAULT_DB_PATH;
+  if (fromEnv) return fromEnv;
+  if (onRender()) return '/data/data.db';
+  return DEFAULT_DB_PATH;
 }
 
 const DB_PATH = resolveDbPath();
@@ -17,6 +23,27 @@ function warnIfCloudSynced(dbPath) {
   if (/onedrive|dropbox|google drive/i.test(dbPath)) {
     console.warn('⚠️  Database is on a cloud-synced drive. SQLite + OneDrive/Dropbox can corrupt data.db.');
     console.warn('   Set DB_PATH in .env to a local folder, e.g. %LOCALAPPDATA%\\osrs-clan-bot\\data.db');
+  }
+}
+
+function assertPersistent(dbPath) {
+  if (!onRender()) {
+    warnIfCloudSynced(dbPath);
+    return;
+  }
+  const resolved = path.resolve(dbPath).replace(/\\/g, '/');
+  if (resolved.includes('/opt/render/project') || !resolved.startsWith('/data')) {
+    console.error('Refusing to start: this would write the clan database on Render’s throwaway disk.');
+    console.error('In the Render dashboard:');
+    console.error('  1. Service → Disks → Add disk');
+    console.error('  2. Mount path: /data   Size: 1 GB');
+    console.error('  3. Environment → DB_PATH = /data/data.db');
+    console.error(`Current path: ${resolved}`);
+    process.exit(1);
+  }
+  if (!fs.existsSync('/data')) {
+    console.error('Refusing to start: /data is not mounted. Add a persistent disk at /data, then set DB_PATH=/data/data.db.');
+    process.exit(1);
   }
 }
 
@@ -49,9 +76,11 @@ function openDatabase(dbPath) {
 
 function getDb() {
   if (!db) {
-    warnIfCloudSynced(DB_PATH);
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    assertPersistent(DB_PATH);
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     db = openDatabase(DB_PATH);
+    console.log(onRender() ? `Persistent database at ${DB_PATH}` : `Database initialized at ${DB_PATH}`);
   }
   return db;
 }
@@ -415,7 +444,6 @@ function initDb() {
   migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
   migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
 
-  console.log('Database initialized at', DB_PATH);
   return db;
 }
 
