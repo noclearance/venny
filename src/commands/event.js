@@ -96,8 +96,19 @@ module.exports = {
         category,
       };
 
+      const flavor = require('../services/flavor');
+      const card = await flavor.write({
+        job: 'event_start',
+        facts: { title, category, staffNotes: description || null },
+        fallbackTitle: title,
+        fallbackDescription: description || theme.line('eventPosted', event.id),
+      });
+
       await interaction.reply({
-        embeds: [buildEventContent(event, await getAttendance(event.id))],
+        embeds: [buildEventContent(event, await getAttendance(event.id), {
+          title: card.title,
+          intro: card.description,
+        })],
         components: [buildRsvpRow(event.id)],
       });
 
@@ -105,9 +116,9 @@ module.exports = {
       await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
       await broadcast(interaction.client, interaction.guildId, {
         kind: 'event',
-        title,
+        title: card.title,
         description: [
-          event.description || theme.line('eventPosted', event.id),
+          card.description,
           'Hit **Going** on the card if you’re in. I’ll ping 15 minutes before.',
         ].join('\n\n'),
         fields: [
@@ -160,12 +171,20 @@ module.exports = {
       const mentionStr = alreadyReminded
         ? null
         : await subs.buildMentionString(event.guild_id, event.category || 'general');
+      const flavor = require('../services/flavor');
+      const card = await flavor.write({
+        job: 'event_remind',
+        facts: { title: event.title, category: event.category || 'general', alreadyReminded },
+        fallbackTitle: event.title,
+        fallbackDescription: event.description || theme.line('eventSoon', event.id),
+      });
       await interaction.reply({
         content: mentionStr || undefined,
         embeds: [theme.embed('event', {
-          title: event.title,
+          title: card.title,
           description: [
-            event.description || theme.line('eventSoon', event.id),
+            card.description,
+            event.description && event.description !== card.description ? event.description : null,
             theme.when(event.event_time),
             alreadyReminded ? 'Posted quietly — this event was already reminded.' : 'If you’re coming, be logged in.',
           ].filter(Boolean).join('\n\n'),

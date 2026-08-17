@@ -46,15 +46,22 @@ async function tick(client) {
       const mentionStr = await subs.buildMentionString(event.guild_id, category);
 
       const economy = require('./economy');
+      const card = await require('./flavor').write({
+        job: started ? 'event_now' : 'event_soon',
+        facts: { title: event.title, category: event.category || 'general', started },
+        fallbackTitle: event.title,
+        fallbackDescription: event.description || theme.line(started ? 'eventNow' : 'eventSoon', event.id),
+      });
       await channel.send({
         content: mentionStr || undefined,
         embeds: [theme.embed('event', {
-          title: event.title,
+          title: card.title,
           description: [
-            event.description || theme.line(started ? 'eventNow' : 'eventSoon', event.id),
+            card.description,
+            event.description && event.description !== card.description ? event.description : null,
             theme.when(event.event_time),
             started ? 'It’s up. Get in.' : 'Fifteen minutes. If you’re coming, be logged in.',
-          ].join('\n\n'),
+          ].filter(Boolean).join('\n\n'),
           fields: event.category === 'sotw'
             ? [theme.field('Guild credits', economy.payNote('sotw_win'))]
             : [theme.field('Guild credits', economy.payNote('event_rsvp'))],
@@ -172,15 +179,24 @@ async function finalizeSotw(client, sotw) {
       if (channel) {
         const theme = require('./theme');
         const top = sorted.slice(0, 5);
+        const board = sorted.length
+          ? theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)
+          : 'No XP was gained.';
+        const card = await require('./flavor').write({
+          job: 'sotw_end',
+          facts: {
+            skill: sotw.skill,
+            winner: winnerRsn || null,
+            xp: xpGained || null,
+            placed: sorted.length,
+          },
+          fallbackTitle: `${sotw.skill} SOTW — results`,
+          fallbackDescription: theme.line('sotwEnded', sotw.id),
+        });
         const posted = await channel.send({
           embeds: [theme.embed('sotw', {
-            title: `${sotw.skill} SOTW — results`,
-            description: [
-              theme.line('sotwEnded', sotw.id),
-              sorted.length
-                ? theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)
-                : 'No XP was gained.',
-            ].join('\n\n'),
+            title: card.title,
+            description: [card.description, board].join('\n\n'),
             thumbnail: theme.skillIconUrl(sotw.skill),
             url: sotw.wom_competition_id
               ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`
@@ -189,10 +205,10 @@ async function finalizeSotw(client, sotw) {
         });
         await require('./announce').broadcast(client, sotw.guild_id, {
           kind: 'sotw',
-          title: `${sotw.skill} SOTW — results`,
+          title: card.title,
           description: winnerRsn
-            ? `**${winnerRsn}** takes the week${xpGained ? ` · ${xpGained.toLocaleString()} XP` : ''}.`
-            : 'Week’s done. Nobody posted gains.',
+            ? `${card.description}\n\n**${winnerRsn}** takes the week${xpGained ? ` · ${xpGained.toLocaleString()} XP` : ''}.`
+            : card.description,
           fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,

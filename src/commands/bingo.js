@@ -240,10 +240,16 @@ module.exports = {
       });
       await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
       await bingo.saveMessage(card.id, interaction.channelId, msg.id);
+      const cardCopy = await require('../services/flavor').write({
+        job: 'bingo_start',
+        facts: { title: fresh.title },
+        fallbackTitle: `${fresh.title} is live`,
+        fallbackDescription: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+      });
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'raffle',
-        title: `${fresh.title} is live`,
-        description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+        title: cardCopy.title,
+        description: cardCopy.description,
         fields: [require('../services/theme').field('Guild credits', require('../services/economy').payNote('bingo_tile'))],
         sourceChannelId: interaction.channelId,
         sourceMessageId: msg.id,

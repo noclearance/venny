@@ -207,10 +207,16 @@ async function handleBingoComponent(interaction) {
     await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
     await bingo.saveMessage(card.id, interaction.channelId, msg.id);
     const theme = require('./theme');
+    const cardCopy = await require('./flavor').write({
+      job: 'bingo_start',
+      facts: { title: fresh.title },
+      fallbackTitle: `${fresh.title} is live`,
+      fallbackDescription: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+    });
     await require('./announce').broadcast(interaction.client, interaction.guildId, {
       kind: 'raffle',
-      title: `${fresh.title} is live`,
-      description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
+      title: cardCopy.title,
+      description: cardCopy.description,
       fields: [theme.field('Guild credits', require('./economy').payNote('bingo_tile'))],
       sourceChannelId: interaction.channelId,
       sourceMessageId: msg.id,

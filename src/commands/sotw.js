@@ -113,11 +113,15 @@ module.exports = {
       await interaction.editReply(result.embed ? { embeds: [result.embed] } : result.response);
       const posted = await interaction.fetchReply();
       const theme = require('../services/theme');
+      const card = result.card || {
+        title: `${skill} SOTW`,
+        description: theme.line('sotwOpen', `${skill}-${result.sotwId}`),
+      };
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'sotw',
-        title: `${skill} SOTW`,
+        title: card.title,
         description: [
-          theme.line('sotwOpen', `${skill}-${result.sotwId}`),
+          card.description,
           'Gains from this second. `/sotw me` for your place.',
         ].join('\n\n'),
         fields: [
@@ -162,13 +166,22 @@ module.exports = {
         const endTs = Math.floor(new Date(sotw.ends_at).getTime() / 1000);
         const top = participations.slice(0, 10);
         const extra = participations.length > 10 ? `\n\n*+${participations.length - 10} more on WOM*` : '';
+        const board = participations.length === 0
+          ? theme.line('sotwEmpty', sotw.id)
+          : `${theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)}${extra}`;
+        const card = await require('../services/flavor').write({
+          job: 'sotw_standings',
+          facts: { skill: sotw.skill, onBoard: participations.length },
+          fallbackTitle: `${sotw.skill} SOTW`,
+          fallbackDescription: participations.length === 0 ? board : '',
+        });
 
         const reply = await interaction.editReply({
           embeds: [theme.embed('sotw', {
-            title: `${sotw.skill} SOTW`,
+            title: card.title,
             description: participations.length === 0
-              ? theme.line('sotwEmpty', sotw.id)
-              : `${theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)}${extra}`,
+              ? (card.description || board)
+              : [card.description, board].filter(Boolean).join('\n\n'),
             thumbnail: theme.skillIconUrl(sotw.skill),
             url: sotw.wom_competition_id
               ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`

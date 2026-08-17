@@ -63,10 +63,17 @@ module.exports = {
         }
 
         const theme = require('../services/theme');
+        const board = theme.rankLines(hiscores, entry => `**${entry.player.displayName}** — ${entry.data.experience.toLocaleString()} XP · lvl ${entry.data.level}`);
+        const card = await require('../services/flavor').write({
+          job: 'leaderboard_hiscores',
+          facts: { skill, count: hiscores.length },
+          fallbackTitle: `${wom.getSkillEmoji(skill)}  Clan hiscores · ${skill}`,
+          fallbackDescription: '',
+        });
         await interaction.editReply({
           embeds: [theme.embed('info', {
-            title: `${wom.getSkillEmoji(skill)}  Clan hiscores · ${skill}`,
-            description: theme.rankLines(hiscores, entry => `**${entry.player.displayName}** — ${entry.data.experience.toLocaleString()} XP · lvl ${entry.data.level}`),
+            title: card.title,
+            description: [card.description, board].filter(Boolean).join('\n\n'),
             thumbnail: theme.skillIconUrl(skill),
           })],
         });
@@ -96,10 +103,17 @@ module.exports = {
 
         const top = gained.slice(0, 10);
         const theme = require('../services/theme');
+        const board = theme.rankLines(top, entry => `**${entry.player.displayName}** — +${entry.data.gained.toLocaleString()} XP`);
+        const card = await require('../services/flavor').write({
+          job: 'leaderboard_gained',
+          facts: { skill, period, count: top.length },
+          fallbackTitle: `${wom.getSkillEmoji(skill)}  XP gained · ${skill}`,
+          fallbackDescription: '',
+        });
         await interaction.editReply({
           embeds: [theme.embed('sotw', {
-            title: `${wom.getSkillEmoji(skill)}  XP gained · ${skill}`,
-            description: theme.rankLines(top, entry => `**${entry.player.displayName}** — +${entry.data.gained.toLocaleString()} XP`),
+            title: card.title,
+            description: [card.description, board].filter(Boolean).join('\n\n'),
             thumbnail: theme.skillIconUrl(skill),
             fields: [theme.field('Period', period, true)],
           })],

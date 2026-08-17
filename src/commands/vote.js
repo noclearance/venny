@@ -163,12 +163,19 @@ module.exports = {
       const endsAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
       const theme = require('../services/theme');
 
+      const card = await require('../services/flavor').write({
+        job: 'vote_generic',
+        facts: { question },
+        fallbackTitle: 'Clan vote',
+        fallbackDescription: 'One vote. Hit the poll under this card.',
+      });
+
       const pollMsg = await postAnnouncedPoll(interaction, {
         embed: theme.embed('poll', {
-          title: 'Clan vote',
+          title: card.title,
           description: [
+            card.description,
             question,
-            'One vote. Hit the poll under this card.',
           ].join('\n\n'),
           fields: [
             theme.field('Closes', theme.when(endsAt.toISOString()), true),
@@ -190,8 +197,8 @@ module.exports = {
 
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'poll',
-        title: 'Clan vote',
-        description: `${question}\n\nOne vote. Hit the poll on the original post.`,
+        title: card.title,
+        description: `${card.description}\n\n${question}`,
         fields: [theme.field('Closes', theme.when(endsAt.toISOString()), true)],
         sourceChannelId: pollMsg.channelId,
         sourceMessageId: pollMsg.id,
@@ -342,12 +349,21 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
     ? 'Vote BOTW — I rolled these'
     : 'Vote for the next Boss of the Week';
 
+  const card = await require('../services/flavor').write({
+    job: 'vote_botw',
+    facts: { rolled: Boolean(rolled), bosses: uniqueBosses },
+    fallbackTitle: 'Boss of the Week',
+    fallbackDescription: [
+      'One vote. Pick the boss for next week.',
+      rolled ? theme.line('voteRoll', Date.now()) : null,
+    ].filter(Boolean).join('\n\n'),
+  });
+
   const pollMsg = await postAnnouncedPoll(interaction, {
     embed: theme.embed('poll', {
-      title: 'Boss of the Week',
+      title: card.title,
       description: [
-        'One vote. Pick the boss for next week.',
-        rolled ? theme.line('voteRoll', Date.now()) : null,
+        card.description,
         'Winner is whoever the clan picks. After it closes, a mod starts it with `/boss week`. I do not auto-track KC off this poll yet.',
       ].filter(Boolean).join('\n\n'),
       fields: [
@@ -371,11 +387,8 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
 
   await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
     kind: 'poll',
-    title: 'Boss of the Week vote',
-    description: [
-      'One vote. Pick the boss for next week.',
-      rolled ? theme.line('voteRoll', Date.now()) : null,
-    ].filter(Boolean).join('\n\n'),
+    title: card.title,
+    description: card.description,
     fields: [
       theme.field('Closes', theme.when(endsAt.toISOString()), true),
       theme.field(rolled ? 'I rolled' : 'On the ballot', uniqueBosses.join('\n')),
@@ -404,12 +417,21 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     ? 'Vote SOTW — I rolled these'
     : 'Vote for the next Skill of the Week';
 
+  const card = await require('../services/flavor').write({
+    job: 'vote_sotw',
+    facts: { rolled: Boolean(rolled), skills: uniqueSkills, autoStart, days: sotwDuration },
+    fallbackTitle: 'Skill of the Week',
+    fallbackDescription: [
+      'One vote. Pick the skill for the next week.',
+      rolled ? theme.line('voteRoll', Date.now()) : null,
+    ].filter(Boolean).join('\n\n'),
+  });
+
   const pollMsg = await postAnnouncedPoll(interaction, {
     embed: theme.embed('sotw', {
-      title: 'Skill of the Week',
+      title: card.title,
       description: [
-        'One vote. Pick the skill for the next week.',
-        rolled ? theme.line('voteRoll', Date.now()) : null,
+        card.description,
         autoStart
           ? `Winner goes on Wise Old Man and the clan calendar for **${sotwDuration} days**. Gains count from that moment. \`/sotw me\` after it starts.`
           : 'Votes only — this will not start a week on Wise Old Man.',
@@ -447,10 +469,9 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
 
   await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
     kind: 'sotw',
-    title: 'Skill of the Week vote',
+    title: card.title,
     description: [
-      'One vote. Pick the skill for the next week.',
-      rolled ? theme.line('voteRoll', Date.now()) : null,
+      card.description,
       autoStart
         ? `Winner goes on Wise Old Man and the calendar for **${sotwDuration} days**.`
         : 'Votes only — will not start a week on Wise Old Man.',

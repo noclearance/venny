@@ -25,6 +25,12 @@ function validateEnv() {
   if (!clientId || clientId.startsWith('your_')) {
     console.warn('⚠️  CLIENT_ID is missing. Slash command registration will fail until you set it in .env.');
   }
+
+  if ((process.env.OPENAI_API_KEY || '').trim()) {
+    console.log('OpenAI: card copy on');
+  } else {
+    console.log('OpenAI: no key — using canned Venny lines');
+  }
 }
 
 async function boot() {

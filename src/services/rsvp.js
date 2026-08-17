@@ -30,17 +30,19 @@ function formatNames(userIds, limit = 8) {
   return shown + extra;
 }
 
-function buildEventContent(event, attendance = { yes: [], maybe: [], no: [] }) {
+function buildEventContent(event, attendance = { yes: [], maybe: [], no: [] }, extras = {}) {
   const meta = [
     event.category && event.category !== 'general' ? event.category : null,
     event.recurrence && event.recurrence !== 'none' ? `repeats ${event.recurrence}` : null,
     `#${event.id}`,
   ].filter(Boolean).join(' · ');
 
+  const title = extras.title || `${theme.categoryIcon(event.category)}  ${event.title}`;
   return theme.embed('event', {
-    title: `${theme.categoryIcon(event.category)}  ${event.title}`,
+    title,
     description: [
-      event.description || theme.line('eventPosted', event.id),
+      extras.intro || event.description || theme.line('eventPosted', event.id),
+      extras.intro && event.description ? event.description : null,
       theme.when(event.event_time),
       'I’ll ping 15 minutes before. Hit **Going** if you’re in — that’s the count I run with.',
       meta,

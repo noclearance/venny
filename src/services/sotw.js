@@ -55,12 +55,20 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   }
 
   const economy = require('./economy');
-  const embed = theme.embed('sotw', {
-    title: `${skill} SOTW`,
-    description: [
+  const card = await require('./flavor').write({
+    job: 'sotw_start',
+    facts: { skill, days: durationDays },
+    fallbackTitle: `${skill} SOTW`,
+    fallbackDescription: [
       theme.line('sotwOpen', `${skill}-${result.lastInsertRowid}`),
-      tracking,
       'Gains from this second. First on the board when it ends takes the week.',
+    ].join('\n\n'),
+  });
+  const embed = theme.embed('sotw', {
+    title: card.title,
+    description: [
+      card.description,
+      tracking,
     ].join('\n\n'),
     thumbnail: theme.skillIconUrl(skill),
     url: womCompetitionId ? `https://wiseoldman.net/competitions/${womCompetitionId}` : undefined,
@@ -93,7 +101,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     console.error('SOTW calendar event failed:', err.message);
   }
 
-  return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId };
+  return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card };
 }
 
 module.exports = { startSotw };
