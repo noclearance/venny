@@ -248,8 +248,8 @@ module.exports = {
       });
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'raffle',
-        title: cardCopy.title,
-        description: cardCopy.description,
+        job: 'bingo_start',
+        card: cardCopy,
         fields: [require('../services/theme').field('Guild credits', require('../services/economy').payNote('bingo_tile'))],
         sourceChannelId: interaction.channelId,
         sourceMessageId: msg.id,

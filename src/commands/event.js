@@ -108,6 +108,7 @@ module.exports = {
         embeds: [buildEventContent(event, await getAttendance(event.id), {
           title: card.title,
           intro: card.description,
+          color: card.color,
         })],
         components: [buildRsvpRow(event.id)],
       });
@@ -116,11 +117,8 @@ module.exports = {
       await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
       await broadcast(interaction.client, interaction.guildId, {
         kind: 'event',
-        title: card.title,
-        description: [
-          card.description,
-          'Hit **Going** on the card if you’re in. I’ll ping 15 minutes before.',
-        ].join('\n\n'),
+        job: 'event_start',
+        card,
         fields: [
           theme.field('When', theme.when(event.event_time), true),
           theme.field('Guild credits', economy.payNote('event_rsvp')),
@@ -180,8 +178,7 @@ module.exports = {
       });
       await interaction.reply({
         content: mentionStr || undefined,
-        embeds: [theme.embed('event', {
-          title: card.title,
+        embeds: [theme.fromJson('event', card, {
           description: [
             card.description,
             event.description && event.description !== card.description ? event.description : null,

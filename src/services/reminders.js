@@ -54,8 +54,7 @@ async function tick(client) {
       });
       await channel.send({
         content: mentionStr || undefined,
-        embeds: [theme.embed('event', {
-          title: card.title,
+        embeds: [theme.fromJson('event', card, {
           description: [
             card.description,
             event.description && event.description !== card.description ? event.description : null,
@@ -194,8 +193,7 @@ async function finalizeSotw(client, sotw) {
           fallbackDescription: theme.line('sotwEnded', sotw.id),
         });
         const posted = await channel.send({
-          embeds: [theme.embed('sotw', {
-            title: card.title,
+          embeds: [theme.fromJson('sotw', card, {
             description: [card.description, board].join('\n\n'),
             thumbnail: theme.skillIconUrl(sotw.skill),
             url: sotw.wom_competition_id
@@ -205,10 +203,8 @@ async function finalizeSotw(client, sotw) {
         });
         await require('./announce').broadcast(client, sotw.guild_id, {
           kind: 'sotw',
-          title: card.title,
-          description: winnerRsn
-            ? `${card.description}\n\n**${winnerRsn}** takes the week${xpGained ? ` · ${xpGained.toLocaleString()} XP` : ''}.`
-            : card.description,
+          job: 'sotw_end',
+          card,
           fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,

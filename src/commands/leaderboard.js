@@ -71,8 +71,7 @@ module.exports = {
           fallbackDescription: '',
         });
         await interaction.editReply({
-          embeds: [theme.embed('info', {
-            title: card.title,
+          embeds: [theme.fromJson('info', card, {
             description: [card.description, board].filter(Boolean).join('\n\n'),
             thumbnail: theme.skillIconUrl(skill),
           })],
@@ -111,8 +110,7 @@ module.exports = {
           fallbackDescription: '',
         });
         await interaction.editReply({
-          embeds: [theme.embed('sotw', {
-            title: card.title,
+          embeds: [theme.fromJson('sotw', card, {
             description: [card.description, board].filter(Boolean).join('\n\n'),
             thumbnail: theme.skillIconUrl(skill),
             fields: [theme.field('Period', period, true)],

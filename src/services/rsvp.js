@@ -39,6 +39,7 @@ function buildEventContent(event, attendance = { yes: [], maybe: [], no: [] }, e
 
   const title = extras.title || `${theme.categoryIcon(event.category)}  ${event.title}`;
   return theme.embed('event', {
+    color: extras.color,
     title,
     description: [
       extras.intro || event.description || theme.line('eventPosted', event.id),

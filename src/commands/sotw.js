@@ -119,11 +119,8 @@ module.exports = {
       };
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'sotw',
-        title: card.title,
-        description: [
-          card.description,
-          'Gains from this second. `/sotw me` for your place.',
-        ].join('\n\n'),
+        job: 'sotw_start',
+        card,
         fields: [
           theme.field('Guild credits', require('../services/economy').payNote('sotw_win')),
         ],
@@ -177,8 +174,7 @@ module.exports = {
         });
 
         const reply = await interaction.editReply({
-          embeds: [theme.embed('sotw', {
-            title: card.title,
+          embeds: [theme.fromJson('sotw', card, {
             description: participations.length === 0
               ? (card.description || board)
               : [card.description, board].filter(Boolean).join('\n\n'),

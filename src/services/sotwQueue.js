@@ -67,8 +67,8 @@ async function startNextQueuedSotw(guildId, client) {
         };
         await require('./announce').broadcast(client, guildId, {
           kind: 'sotw',
-          title: card.title,
-          description: `${card.description}\n\nPulled from the queue. Gains count now.`,
+          job: 'sotw_start',
+          card,
           fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,

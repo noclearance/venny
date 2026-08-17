@@ -64,12 +64,8 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
       'Gains from this second. First on the board when it ends takes the week.',
     ].join('\n\n'),
   });
-  const embed = theme.embed('sotw', {
-    title: card.title,
-    description: [
-      card.description,
-      tracking,
-    ].join('\n\n'),
+  const embed = theme.fromJson('sotw', card, {
+    description: [card.description, tracking].join('\n\n'),
     thumbnail: theme.skillIconUrl(skill),
     url: womCompetitionId ? `https://wiseoldman.net/competitions/${womCompetitionId}` : undefined,
     fields: [

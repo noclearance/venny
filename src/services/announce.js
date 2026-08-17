@@ -14,6 +14,9 @@ async function broadcast(client, guildId, {
   sourceChannelId,
   sourceMessageId,
   mention,
+  job,
+  facts,
+  card,
 } = {}) {
   if (!client || !guildId) return null;
   const settings = await getDb().prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
@@ -21,20 +24,27 @@ async function broadcast(client, guildId, {
   if (!channelId) return null;
   if (sourceChannelId && String(sourceChannelId) === String(channelId)) return null;
 
+  let json = card;
+  if (!json && job) {
+    json = await require('./flavor').announce(job, facts || { title, description });
+  }
+  if (!json) {
+    json = { title, description };
+  }
+
   const jump = jumpUrl(guildId, sourceChannelId, sourceMessageId);
   const extra = [...(fields || [])];
-  if (jump) extra.push(theme.field('Jump in', `[Open the post](${jump})`));
+  if (jump) extra.push(theme.field('Details', `[Click here to view the event!](${jump})`));
 
   try {
     const channel = await client.channels.fetch(channelId);
     return channel.send({
       content: mention || undefined,
       allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] },
-      embeds: [theme.embed(kind, {
-        title,
-        description,
+      embeds: [theme.fromJson(kind, json, {
         fields: extra,
         url: jump || undefined,
+        timestamp: true,
       })],
     });
   } catch (err) {

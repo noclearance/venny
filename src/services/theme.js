@@ -181,8 +181,11 @@ function embed(kind, {
   author,
   footer,
   timestamp = false,
+  color,
 } = {}) {
-  const built = new EmbedBuilder().setColor(COLORS[kind] || COLORS.brand);
+  const built = new EmbedBuilder().setColor(
+    Number.isInteger(color) ? color : (COLORS[kind] || COLORS.brand)
+  );
   const face = KIND_FACE[kind] || KIND_FACE.brand;
 
   const who = author === false
@@ -204,6 +207,16 @@ function embed(kind, {
   return built;
 }
 
+// Grazy: Discord.Embed.from_dict({ title, description, color }) then extra fields.
+function fromJson(kind, json = {}, extras = {}) {
+  return embed(kind, {
+    ...extras,
+    title: json.title || extras.title,
+    description: json.description || extras.description,
+    color: json.color,
+  });
+}
+
 function categoryIcon(category) {
   return CATEGORY_ICONS[category] || CATEGORY_ICONS.general;
 }
@@ -221,6 +234,7 @@ module.exports = {
   rankLines,
   field,
   embed,
+  fromJson,
   categoryIcon,
   getSkillEmoji,
 };

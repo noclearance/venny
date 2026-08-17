@@ -215,8 +215,8 @@ async function handleBingoComponent(interaction) {
     });
     await require('./announce').broadcast(interaction.client, interaction.guildId, {
       kind: 'raffle',
-      title: cardCopy.title,
-      description: cardCopy.description,
+      job: 'bingo_start',
+      card: cardCopy,
       fields: [theme.field('Guild credits', require('./economy').payNote('bingo_tile'))],
       sourceChannelId: interaction.channelId,
       sourceMessageId: msg.id,
