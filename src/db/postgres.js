@@ -37,10 +37,12 @@ function wrapPg() {
         run: async (...args) => {
           let q = translateSql(sql);
           const inserting = /^\s*INSERT/i.test(sql) && !/RETURNING/i.test(q);
-          if (inserting) q = `${q.replace(/;?\s*$/, '')} RETURNING id`;
+          // Some tables use guild_id as the PK and have no `id` column.
+          if (inserting) q = `${q.replace(/;?\s*$/, '')} RETURNING *`;
           const res = await p.query(q, args);
+          const row = res.rows[0] || {};
           return {
-            lastInsertRowid: Number(res.rows[0]?.id ?? 0),
+            lastInsertRowid: Number(row.id ?? 0),
             changes: Number(res.rowCount ?? 0),
           };
         },
