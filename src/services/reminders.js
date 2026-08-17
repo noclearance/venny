@@ -56,8 +56,8 @@ async function tick(client) {
             started ? 'It’s up. Get in.' : 'Fifteen minutes. If you’re coming, be logged in.',
           ].join('\n\n'),
           fields: event.category === 'sotw'
-            ? [theme.field('Credits', economy.payNote('sotw_win'))]
-            : [theme.field('Credits', economy.payNote('event_rsvp'))],
+            ? [theme.field('Guild credits', economy.payNote('sotw_win'))]
+            : [theme.field('Guild credits', economy.payNote('event_rsvp'))],
         })],
         allowedMentions: { parse: ['users', 'roles'] },
       });
@@ -193,7 +193,7 @@ async function finalizeSotw(client, sotw) {
           description: winnerRsn
             ? `**${winnerRsn}** takes the week${xpGained ? ` · ${xpGained.toLocaleString()} XP` : ''}.`
             : 'Week’s done. Nobody posted gains.',
-          fields: [theme.field('Credits', require('./economy').payNote('sotw_win'))],
+          fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });

@@ -28,7 +28,7 @@ function payRates(...reasons) {
   return reasons.map(reason => {
     const n = REWARDS[reason];
     const why = REWARD_COPY[reason];
-    return n && why ? `**${n}** credits — ${why}` : null;
+    return n && why ? `**${n}** guild credits — ${why}` : null;
   }).filter(Boolean).join('\n');
 }
 
@@ -57,9 +57,9 @@ async function tell(client, userId, amount, reason, balance) {
     const theme = require('./theme');
     await user.send({
       embeds: [theme.embed('success', {
-        title: 'Credits',
+        title: 'Guild credits',
         description: `**+${amount}** for ${why}.\nNobody else sees this.`,
-        fields: [theme.field('Pouch', `**${balance.toLocaleString()}**`, true)],
+        fields: [theme.field('Balance', `**${balance.toLocaleString()}** guild credits`, true)],
         footer: '/economy balance if you want the card',
       })],
     });

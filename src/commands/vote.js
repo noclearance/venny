@@ -418,7 +418,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
         theme.field('Closes', theme.when(endsAt), true),
         theme.field('Week', `${sotwDuration} days`, true),
         theme.field(rolled ? 'I rolled' : 'On the ballot', labels.join('\n')),
-        theme.field('Credits', economy.payNote('sotw_win')),
+        theme.field('Guild credits', economy.payNote('sotw_win')),
       ],
     }),
     poll: {
@@ -457,7 +457,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     ].filter(Boolean).join('\n\n'),
     fields: [
       theme.field('Closes', theme.when(endsAt), true),
-      theme.field('Credits', economy.payNote('sotw_win')),
+      theme.field('Guild credits', economy.payNote('sotw_win')),
     ],
     sourceChannelId: pollMsg.channelId,
     sourceMessageId: pollMsg.id,

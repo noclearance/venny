@@ -112,7 +112,7 @@ module.exports = {
         ].join('\n\n'),
         fields: [
           theme.field('When', theme.when(event.event_time), true),
-          theme.field('Credits', economy.payNote('event_rsvp')),
+          theme.field('Guild credits', economy.payNote('event_rsvp')),
         ],
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
@@ -170,7 +170,7 @@ module.exports = {
             alreadyReminded ? 'Posted quietly — this event was already reminded.' : 'If you’re coming, be logged in.',
           ].filter(Boolean).join('\n\n'),
           fields: [
-            theme.field('Credits', economy.payNote(event.category === 'sotw' ? 'sotw_win' : 'event_rsvp')),
+            theme.field('Guild credits', economy.payNote(event.category === 'sotw' ? 'sotw_win' : 'event_rsvp')),
           ],
         })],
         allowedMentions: alreadyReminded ? { parse: [] } : { parse: ['users', 'roles'] },

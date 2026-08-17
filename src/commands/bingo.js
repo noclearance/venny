@@ -244,7 +244,7 @@ module.exports = {
         kind: 'raffle',
         title: `${fresh.title} is live`,
         description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
-        fields: [require('../services/theme').field('Credits', require('../services/economy').payNote('bingo_tile'))],
+        fields: [require('../services/theme').field('Guild credits', require('../services/economy').payNote('bingo_tile'))],
         sourceChannelId: interaction.channelId,
         sourceMessageId: msg.id,
       });

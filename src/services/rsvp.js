@@ -49,7 +49,7 @@ function buildEventContent(event, attendance = { yes: [], maybe: [], no: [] }) {
       theme.field(`Going · ${attendance.yes.length}`, formatNames(attendance.yes), true),
       theme.field(`Maybe · ${attendance.maybe.length}`, formatNames(attendance.maybe), true),
       theme.field(`Out · ${attendance.no.length}`, formatNames(attendance.no), true),
-      theme.field('Credits', economy.payNote('event_rsvp')),
+      theme.field('Guild credits', economy.payNote('event_rsvp')),
     ],
   });
 }

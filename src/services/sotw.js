@@ -67,7 +67,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     fields: [
       theme.field('Ends', `<t:${endTs}:R>`, true),
       theme.field('ID', `#${result.lastInsertRowid}`, true),
-      theme.field('Credits', economy.payNote('sotw_win')),
+      theme.field('Guild credits', economy.payNote('sotw_win')),
     ],
   });
 

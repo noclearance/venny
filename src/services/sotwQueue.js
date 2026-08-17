@@ -65,7 +65,7 @@ async function startNextQueuedSotw(guildId, client) {
           kind: 'sotw',
           title: `${next.skill} SOTW`,
           description: `${theme.line('sotwOpen', next.skill)}\n\nPulled from the queue. Gains count now.`,
-          fields: [theme.field('Credits', require('./economy').payNote('sotw_win'))],
+          fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });

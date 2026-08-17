@@ -96,7 +96,7 @@ module.exports = {
           ].join('\n\n'),
           fields: [
             theme.field('Ticket', ticketGp > 0 ? `${ticketGp.toLocaleString()} GP` : 'Free', true),
-            theme.field('Credits', economy.payNote('raffle_enter', 'raffle_win')),
+            theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
           ],
         })],
         components: [row],
@@ -111,7 +111,7 @@ module.exports = {
         ].join('\n\n'),
         fields: [
           theme.field('Ticket', ticketGp > 0 ? `${ticketGp.toLocaleString()} GP each` : 'Free', true),
-          theme.field('Credits', economy.payNote('raffle_enter', 'raffle_win')),
+          theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
         ],
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
@@ -223,7 +223,7 @@ module.exports = {
         kind: 'raffle',
         title: `Raffle drawn · ${raffle.title}`,
         description: `<@${winner.user_id}> takes it. ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}.`,
-        fields: [theme.field('Credits', require('../services/economy').payNote('raffle_win'))],
+        fields: [theme.field('Guild credits', require('../services/economy').payNote('raffle_win'))],
         sourceChannelId: drawMsg.channelId,
         sourceMessageId: drawMsg.id,
         mention: `<@${winner.user_id}>`,

@@ -211,7 +211,7 @@ async function handleBingoComponent(interaction) {
       kind: 'raffle',
       title: `${fresh.title} is live`,
       description: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
-      fields: [theme.field('Credits', require('./economy').payNote('bingo_tile'))],
+      fields: [theme.field('Guild credits', require('./economy').payNote('bingo_tile'))],
       sourceChannelId: interaction.channelId,
       sourceMessageId: msg.id,
     });

@@ -121,7 +121,7 @@ module.exports = {
           'Gains from this second. `/sotw me` for your place.',
         ].join('\n\n'),
         fields: [
-          theme.field('Credits', require('../services/economy').payNote('sotw_win')),
+          theme.field('Guild credits', require('../services/economy').payNote('sotw_win')),
         ],
         sourceChannelId: posted.channelId,
         sourceMessageId: posted.id,
