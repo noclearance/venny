@@ -28,16 +28,19 @@ async function handleButton(interaction) {
 }
 
 async function handleRaffleEnter(interaction, db) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: 64 });
+  }
   const raffleId = parseInt(interaction.customId.replace('raffle_enter_', ''), 10);
 
   const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND drawn = 0').get(raffleId);
   if (!raffle) {
-    return interaction.reply({ content: 'This raffle is no longer active.', flags: 64 });
+    return interaction.editReply({ content: 'This raffle is no longer active.' });
   }
 
   const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
   if (!member) {
-    return interaction.reply({ content: '❌ You need to link your OSRS RSN first! Use `/member link rsn:<your_name>` to get started.', flags: 64 });
+    return interaction.editReply({ content: 'Link your RSN first: `/member link`.' });
   }
 
   try {
@@ -45,12 +48,13 @@ async function handleRaffleEnter(interaction, db) {
     await require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client);
     const { ticketLine } = require('../commands/raffle');
     const ticketNote = raffle.ticket_gp > 0 ? `\n${ticketLine(raffle.ticket_gp)}` : '';
-    await interaction.reply({ content: `You're entered in **${raffle.title}** (${member.rsn}).${ticketNote}`, flags: 64 });
+    await interaction.editReply({ content: `You're entered in **${raffle.title}** (${member.rsn}).${ticketNote}` });
   } catch (err) {
-    if (err.message.includes('UNIQUE')) {
-      await interaction.reply({ content: "You're already entered in this raffle!", flags: 64 });
+    if (err.code === '23505' || /UNIQUE|duplicate key/i.test(err.message || '')) {
+      await interaction.editReply({ content: "You're already entered in this raffle." });
     } else {
-      await interaction.reply({ content: 'Failed to enter the raffle.', flags: 64 });
+      console.error('Raffle enter failed:', err.message);
+      await interaction.editReply({ content: 'Failed to enter the raffle.' });
     }
   }
 }

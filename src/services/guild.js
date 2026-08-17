@@ -7,6 +7,7 @@ async function ensureGuildSettings(guildId) {
     await db.prepare(`
       INSERT INTO guild_settings (guild_id, wom_group_id, wom_verif_code, reminder_channel)
       VALUES (?, ?, ?, ?)
+      ON CONFLICT(guild_id) DO NOTHING
     `).run(
       guildId,
       process.env.WOM_GROUP_ID ? parseInt(process.env.WOM_GROUP_ID, 10) : null,

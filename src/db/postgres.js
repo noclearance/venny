@@ -11,7 +11,10 @@ function getPool() {
       ssl: url.includes('localhost') || url.includes('127.0.0.1')
         ? false
         : { rejectUnauthorized: false },
-      max: 8,
+      max: 10,
+    });
+    pool.on('error', err => {
+      console.error('Postgres pool error:', err.message);
     });
   }
   return pool;

@@ -95,6 +95,14 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   });
 }
 
+process.on('unhandledRejection', err => {
+  console.error('Unhandled promise:', err?.message || err);
+});
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 boot().catch(err => {
   console.error('Startup failed:', err);
   process.exit(1);

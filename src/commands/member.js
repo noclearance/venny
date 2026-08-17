@@ -48,7 +48,7 @@ module.exports = {
             ON CONFLICT(guild_id, user_id) DO UPDATE SET rsn = ?, wom_id = ?
           `).run(interaction.guildId, interaction.user.id, details.username, womId, details.username, womId);
         } catch (err) {
-          if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE/i.test(err.message)) {
+          if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === '23505' || /UNIQUE|duplicate key/i.test(err.message)) {
             return interaction.editReply(`❌ **${details.displayName}** is already linked to another Discord account in this server.`);
           }
           throw err;

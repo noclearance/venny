@@ -105,6 +105,7 @@ module.exports = {
 
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bg:')) {
       try {
+        if (interaction.guildId) ensureGuildSettings(interaction.guildId).catch(() => {});
         await bingoUi.handleBingoComponent(interaction);
       } catch (err) {
         logFail('Bingo select', err);
@@ -118,11 +119,14 @@ module.exports = {
 
     if (interaction.isButton()) {
       try {
-        if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
+        // Bingo draft buttons often open a Modal — that must be the first reply.
+        // Do not hit Postgres first or Discord expires the click.
         if (interaction.customId.startsWith('bg:')) {
+          if (interaction.guildId) ensureGuildSettings(interaction.guildId).catch(() => {});
           await bingoUi.handleBingoComponent(interaction);
           return;
         }
+        if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         await handleButton(interaction);
       } catch (err) {
         logFail(`Button ${interaction.customId}`, err);

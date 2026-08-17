@@ -73,18 +73,21 @@ async function updateEventMessage(client, event) {
 }
 
 async function handleRsvp(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: 64 });
+  }
   const db = getDb();
   const parts = interaction.customId.split(':');
   const status = parts[1];
   const eventId = parseInt(parts[2], 10);
 
   if (!['yes', 'maybe', 'no'].includes(status) || !eventId) {
-    return interaction.reply({ content: 'Invalid RSVP button.', flags: 64 });
+    return interaction.editReply({ content: 'Invalid RSVP button.' });
   }
 
   const event = await db.prepare('SELECT * FROM events WHERE id = ? AND guild_id = ?').get(eventId, interaction.guildId);
   if (!event) {
-    return interaction.reply({ content: 'That event no longer exists.', flags: 64 });
+    return interaction.editReply({ content: 'That event no longer exists.' });
   }
 
   const prior = await db.prepare('SELECT status FROM event_attendance WHERE event_id = ? AND user_id = ?').get(eventId, interaction.user.id);
@@ -99,7 +102,7 @@ async function handleRsvp(interaction) {
     await require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client);
   }
 
-  await interaction.reply({ content: `${LABELS[status]} · **${event.title}**`, flags: 64 });
+  await interaction.editReply({ content: `${LABELS[status]} · **${event.title}**` });
 }
 
 module.exports = {

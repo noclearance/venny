@@ -11,6 +11,7 @@ function translateSql(sql) {
   s = s.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
   s = s.replace(/INSERT OR REPLACE INTO/gi, 'INSERT INTO');
   s = s.replace(/ON CONFLICT\(([^)]+)\)/gi, 'ON CONFLICT ($1)');
+  s = s.replace(/\bexcluded\./gi, 'EXCLUDED.');
   if (orIgnore && !/ON CONFLICT/i.test(s)) {
     s = s.replace(/\s*;?\s*$/, ' ON CONFLICT DO NOTHING');
   }
