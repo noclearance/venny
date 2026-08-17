@@ -82,7 +82,9 @@ async function getPaginatedData(type, guildId, page) {
       total,
       items,
       formatter: (items) => items.map(r => {
-        const status = r.drawn ? `✅ Winner: <@${r.winner_id}>` : '🟢 Active';
+        const status = r.drawn
+          ? (r.winner_id ? `Winner: <@${r.winner_id}>` : 'Closed')
+          : 'Open';
         const weight = r.weight_mode && r.weight_mode !== 'none' ? ` | 📊 ${r.weight_mode}` : '';
         return `**#${r.id}** — ${r.title} (${status}${weight})`;
       }).join('\n'),

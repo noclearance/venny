@@ -47,6 +47,10 @@ module.exports = {
         .setDescription('Draw a random winner from the entries')
         .addIntegerOption(opt => opt.setName('id').setDescription('Which raffle').setRequired(true).setAutocomplete(true)))
     .addSubcommand(sub =>
+      sub.setName('end')
+        .setDescription('Close a raffle without drawing a winner')
+        .addIntegerOption(opt => opt.setName('id').setDescription('Which raffle').setRequired(true).setAutocomplete(true)))
+    .addSubcommand(sub =>
       sub.setName('list')
         .setDescription('List all raffles in this server'))
     .addSubcommand(sub =>
@@ -58,8 +62,8 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
 
-    if (['create', 'draw'].includes(sub) && !isModerator(interaction.member)) {
-      return interaction.reply({ content: '❌ You need **Manage Events**, **Manage Server**, or **Administrator** permission to create raffles or draw winners.', flags: 64 });
+    if (['create', 'draw', 'end'].includes(sub) && !isModerator(interaction.member)) {
+      return interaction.reply({ content: '❌ You need **Manage Events**, **Manage Server**, or **Administrator** permission to manage raffles.', flags: 64 });
     }
 
     if (sub === 'create') {
@@ -254,6 +258,53 @@ module.exports = {
       return;
     }
 
+    if (sub === 'end') {
+      const id = interaction.options.getInteger('id');
+      const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+
+      if (!raffle) {
+        return interaction.reply({ content: `❌ Raffle #${id} not found.`, flags: 64 });
+      }
+
+      if (raffle.drawn) {
+        return interaction.reply({
+          content: raffle.winner_id
+            ? `Raffle #${id} already ended. Winner: <@${raffle.winner_id}>`
+            : `Raffle #${id} is already closed.`,
+          flags: 64,
+        });
+      }
+
+      const count = await db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
+      await db.prepare('UPDATE raffles SET drawn = 1, winner_id = NULL WHERE id = ?').run(id);
+
+      const theme = require('../services/theme');
+      const closed = await interaction.reply({
+        embeds: [theme.embed('raffle', {
+          title: `${raffle.title} — closed`,
+          description: 'No winner. The Enter button is dead.',
+          fields: [
+            theme.field('Entries', String(count?.count || 0), true),
+            raffle.description && raffle.description !== 'Click the button below to enter!'
+              ? theme.field('Prize', raffle.description)
+              : null,
+          ],
+          footer: `Raffle #${id}  ·  Misclickers`,
+          timestamp: true,
+        })],
+        fetchReply: true,
+      });
+      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+        kind: 'raffle',
+        title: `${raffle.title} — closed`,
+        description: 'Raffle ended with no draw.',
+        sourceChannelId: closed.channelId,
+        sourceMessageId: closed.id,
+      });
+      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** ended by <@${interaction.user.id}> (no winner)`);
+      return;
+    }
+
     if (sub === 'list') {
       const data = await getPaginatedData('raffles', interaction.guildId, 0);
       if (!data || data.total === 0) {
@@ -317,15 +368,15 @@ module.exports = {
       }
     }
   },
-  staffSubs: ['create', 'draw'],
-  publicSubs: ['create', 'draw'],
+  staffSubs: ['create', 'draw', 'end'],
+  publicSubs: ['create', 'draw', 'end'],
 
   async autocomplete(interaction) {
     const { getDb } = require('../db/database');
     const { filterChoices, respond } = require('../services/autocomplete');
     const db = getDb();
     const sub = interaction.options.getSubcommand();
-    const rows = sub === 'draw'
+    const rows = (sub === 'draw' || sub === 'end')
       ? await db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC LIMIT 25').all(interaction.guildId)
       : await db.prepare('SELECT id, title, drawn FROM raffles WHERE guild_id = ? ORDER BY id DESC LIMIT 25').all(interaction.guildId);
 

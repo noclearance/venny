@@ -15,7 +15,7 @@ module.exports = {
         theme.field('Events', '`/event create` `/list` `/cancel` `/remind`\n`/subscribe add` `/remove` `/list`'),
         theme.field('SOTW', '`/sotw start` `/standings` `/me` `/end` `/queue` `/champions`'),
         theme.field('Leaderboards', '`/leaderboard hiscores` `/gained` `/player`'),
-        theme.field('Raffles & votes', '`/raffle create` `/draw` `/list` `/history`\n`/vote sotw` `/botw` `/generic`'),
+        theme.field('Raffles & votes', '`/raffle create` `/draw` `/end` `/list` `/history`\n`/vote sotw` `/botw` `/generic`'),
         theme.field('Clan', '`/clan info` `/clan sync` `/config view`'),
         theme.field('Also available', [
           '`/profile card` — full stat card',
