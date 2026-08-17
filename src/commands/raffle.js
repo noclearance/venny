@@ -296,6 +296,7 @@ module.exports = {
     }
   },
   staffSubs: ['create', 'draw'],
+  publicSubs: ['create', 'draw'],
 
   async autocomplete(interaction) {
     const { getDb } = require('../db/database');

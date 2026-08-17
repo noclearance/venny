@@ -7,6 +7,25 @@ function isGone(err) {
   return err?.code === 10062 || /Unknown interaction/i.test(err?.message || '');
 }
 
+function shimReply(interaction) {
+  const origReply = interaction.reply.bind(interaction);
+  const origDefer = interaction.deferReply.bind(interaction);
+  interaction.deferReply = options => {
+    if (interaction.deferred || interaction.replied) return Promise.resolve(null);
+    return origDefer(options);
+  };
+  interaction.reply = options => {
+    if (interaction.deferred && !interaction.replied) {
+      const payload = typeof options === 'string' ? { content: options } : { ...options };
+      delete payload.flags;
+      delete payload.ephemeral;
+      delete payload.fetchReply;
+      return interaction.editReply(payload);
+    }
+    return origReply(options);
+  };
+}
+
 function logFail(label, err) {
   if (isGone(err)) {
     console.warn(`${label}: Discord already used this click. If start.bat is open while Render is running, close the local window.`);
@@ -35,6 +54,12 @@ module.exports = {
       if (!command) return;
 
       try {
+        const sub = interaction.options.getSubcommand(false);
+        const isPublic = Boolean(command.publicCommand || (sub && command.publicSubs?.includes(sub)));
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply(isPublic ? {} : { flags: 64 });
+        }
+        shimReply(interaction);
         if (!(await assertCommandAccess(interaction, command))) return;
         if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         await command.execute(interaction);

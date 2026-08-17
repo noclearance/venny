@@ -125,6 +125,7 @@ module.exports = {
     .setType(ApplicationCommandType.Message),
 
   staffSubs: ['create', 'start', 'pause', 'end', 'tile', 'template', 'import'],
+  publicSubs: ['create', 'start', 'board', 'end'],
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();

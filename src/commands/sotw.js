@@ -440,4 +440,5 @@ module.exports = {
     }
   },
   staffSubs: ['start', 'end', 'update', 'cancel'],
+  publicSubs: ['start', 'cancel'],
 };

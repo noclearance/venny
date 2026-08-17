@@ -117,4 +117,5 @@ module.exports = {
       return interaction.editReply(`WOM said no: ${err.message}`);
     }
   },
+  publicSubs: ['week'],
 };

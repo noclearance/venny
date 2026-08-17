@@ -265,6 +265,7 @@ module.exports = {
     }
   },
   adminSubs: ['sotw', 'botw', 'generic', 'cancel'],
+  publicSubs: ['sotw', 'botw', 'generic'],
 
   async autocomplete(interaction) {
     const { filterChoices, respond } = require('../services/autocomplete');

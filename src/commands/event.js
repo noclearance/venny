@@ -181,6 +181,7 @@ module.exports = {
     }
   },
   staffSubs: ['create', 'cancel', 'remind'],
+  publicSubs: ['create', 'remind'],
 
   async autocomplete(interaction) {
     const { getDb } = require('../db/database');

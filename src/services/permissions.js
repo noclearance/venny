@@ -33,14 +33,22 @@ async function assertCommandAccess(interaction, command) {
   const needsStaff = command.staffOnly || (sub && command.staffSubs?.includes(sub));
 
   if (needsAdmin && !isAdmin(interaction.member)) {
-    await interaction.reply({ content: denyMessage(command, 'admin'), flags: 64 });
+    await ack(interaction, denyMessage(command, 'admin'));
     return false;
   }
   if (needsStaff && !isModerator(interaction.member)) {
-    await interaction.reply({ content: denyMessage(command, 'staff'), flags: 64 });
+    await ack(interaction, denyMessage(command, 'staff'));
     return false;
   }
   return true;
+}
+
+async function ack(interaction, content) {
+  const payload = { content, flags: 64 };
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply({ content }).catch(() => interaction.followUp(payload).catch(() => {}));
+  }
+  return interaction.reply(payload);
 }
 
 module.exports = {
