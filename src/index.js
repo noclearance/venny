@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Partials, Events } = require('discord.js');
 require('dotenv').config();
 
 const fs = require('fs');
@@ -6,6 +6,7 @@ const path = require('path');
 const { initDb } = require('./db/database');
 const { ensureGuildSettings } = require('./services/guild');
 const { registerCommands } = require('./deploy-commands');
+const { startServer } = require('./services/webhooks');
 
 function validateEnv() {
   const token = process.env.DISCORD_TOKEN;
@@ -65,14 +66,31 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   }
 }
 
-registerCommands().catch(err => {
-  console.error('Failed to register slash commands on startup:', err.message);
-  console.error('The bot will still start. Run `npm run register` after fixing CLIENT_ID / DISCORD_TOKEN.');
-});
+  startServer(client);
 
+  client.on(Events.Error, err => {
+    console.error('Discord client error:', err.message);
+  });
+  client.on(Events.ShardError, (err, id) => {
+    console.error(`Discord shard ${id} error:`, err.message);
+  });
+  client.on(Events.ShardDisconnect, (event, id) => {
+    console.error(`Discord shard ${id} disconnected (${event?.code || '?'}).`);
+  });
+  client.on(Events.Invalidated, () => {
+    console.error('Discord session invalidated. Exiting so Render restarts.');
+    process.exit(1);
+  });
+
+  registerCommands().catch(err => {
+    console.error('Failed to register slash commands on startup:', err.message);
+    console.error('The bot will still start. Run `npm run register` after fixing CLIENT_ID / DISCORD_TOKEN.');
+  });
+
+  console.log('Connecting to Discord...');
   client.login(process.env.DISCORD_TOKEN).catch(err => {
     console.error('❌ Discord login failed:', err.message);
-    console.error('Check DISCORD_TOKEN in .env and that the bot is invited to your server.');
+    console.error('Check DISCORD_TOKEN on Render (Bot token, not the client secret).');
     process.exit(1);
   });
 }

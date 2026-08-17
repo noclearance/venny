@@ -1,6 +1,5 @@
-const { Events } = require('discord.js');
+const { Events, ActivityType } = require('discord.js');
 const { startReminderPoller } = require('../services/reminders');
-const { startServer } = require('../services/webhooks');
 
 module.exports = {
   name: Events.ClientReady,
@@ -8,8 +7,11 @@ module.exports = {
   execute(readyClient, client) {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
     console.log(`📋 ${client.commands.size} commands loaded`);
+    readyClient.user.setPresence({
+      status: 'online',
+      activities: [{ name: 'Misclickers', type: ActivityType.Watching }],
+    });
     startReminderPoller(client);
     console.log('⏰ Reminder poller started');
-    startServer(client);
   },
 };

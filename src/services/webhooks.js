@@ -24,7 +24,10 @@ async function findHook(token) {
   return await getDb().prepare('SELECT * FROM incoming_webhooks WHERE token = ?').get(token);
 }
 
+let server;
+
 function startServer(client) {
+  if (server) return server;
   // Render Web Services set PORT and refuse to stay up unless something binds it.
   const port = Number(process.env.PORT || process.env.WEBHOOK_PORT || 0);
   if (!port) {
@@ -32,10 +35,15 @@ function startServer(client) {
     return null;
   }
 
-  const server = http.createServer(async (req, res) => {
+  server = http.createServer(async (req, res) => {
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'GET' && (url === '/' || url === '/health')) {
-      res.writeHead(200, { 'Content-Type': 'text/plain' }).end('venny ok');
+      const ready = Boolean(client?.isReady?.());
+      if (url === '/health' && !ready) {
+        res.writeHead(503, { 'Content-Type': 'text/plain' }).end('discord offline');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/plain' }).end(ready ? 'venny ok' : 'venny starting');
       return;
     }
     if (req.method !== 'POST' || !url.startsWith('/hook/')) {
