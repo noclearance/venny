@@ -2,21 +2,24 @@
 // Facts stay in code. This only returns { title, description }.
 // Missing key, timeout, or junk JSON → the fallback the caller already had.
 
-const TIMEOUT_MS = 2500;
+// Slash commands are already deferred, so a few seconds is fine.
+// 2.5s was aborting on Render and silently using the staff text.
+const TIMEOUT_MS = 12000;
 const MODEL = 'gpt-4o-mini';
 
-const SYSTEM = `You write Discord embed copy for Venny, clerk of the Misclickers OSRS clan.
+const SYSTEM = `You write Discord embed copy for Venny, the Misclickers OSRS clan bot.
 
-Voice: dry, short, one person. Not epic. Not a brochure. No emojis.
-2–4 sentences in description. Title is a short headline (max ~60 chars).
+Sound like a clan mate who wants people to show up. Warm, sharp, a little cheeky.
+Not a government form. Not a movie trailer. 1–3 emojis are fine.
 
 Return JSON only: {"title":"...","description":"..."}
 
-Rules:
-- Use only the facts given. Do not invent winners, RSNs, XP, prices, times, or credit amounts.
-- Do not mention guild credits, ticket prices, jump links, or exact timestamps. Those are fields on the card.
-- Do not list a leaderboard. A one-line reaction to the board is fine; names and numbers stay in code.
-- Do not start with "Attention" or "Hear ye".`;
+title: short, specific to THIS post. Punch up the staff title — do not paste it back unchanged.
+description: 2–4 sentences that sell the prize / skill / event using the staff notes.
+
+Do not invent winners, RSNs, XP, ticket prices, credit amounts, or times.
+Do not mention guild credits, GP prices, or timestamps — those are fields on the card.
+Do not list a leaderboard. Do not start with "Attention" or "Hear ye".`;
 
 function clip(value, max) {
   const text = String(value || '').trim();
@@ -38,6 +41,7 @@ async function write({ job, facts = {}, fallbackTitle, fallbackDescription } = {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const started = Date.now();
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -63,24 +67,33 @@ async function write({ job, facts = {}, fallbackTitle, fallbackDescription } = {
     });
 
     if (!res.ok) {
-      console.warn(`OpenAI ${job}: HTTP ${res.status}`);
+      const body = await res.text().catch(() => '');
+      console.warn(`OpenAI ${job}: HTTP ${res.status} ${body.slice(0, 180)}`);
       return fallback;
     }
 
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content;
-    if (!raw) return fallback;
+    if (!raw) {
+      console.warn(`OpenAI ${job}: empty response`);
+      return fallback;
+    }
 
     const parsed = JSON.parse(raw);
     const title = clip(parsed.title, 256);
     const description = clip(parsed.description, 1800);
-    if (!title && !description) return fallback;
+    if (!title && !description) {
+      console.warn(`OpenAI ${job}: JSON missing title/description`);
+      return fallback;
+    }
+    console.log(`OpenAI ${job}: ok ${Date.now() - started}ms`);
     return {
       title: title || fallback.title,
       description: description || fallback.description,
     };
   } catch (err) {
-    console.warn(`OpenAI ${job}: ${err.message}`);
+    const why = err.name === 'AbortError' ? `timeout ${TIMEOUT_MS}ms` : err.message;
+    console.warn(`OpenAI ${job}: fallback (${why})`);
     return fallback;
   } finally {
     clearTimeout(timer);

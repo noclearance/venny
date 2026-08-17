@@ -165,6 +165,12 @@ const KIND_FACE = {
   muted: { tag: 'Note' },
 };
 
+const KIND_THUMB = {
+  raffle: 'https://oldschool.runescape.wiki/images/Casket.png',
+  event: 'https://oldschool.runescape.wiki/images/Map_link_icon.png',
+  poll: 'https://oldschool.runescape.wiki/images/Skull_sceptre.png',
+};
+
 function embed(kind, {
   title,
   description,
@@ -188,6 +194,7 @@ function embed(kind, {
   if (description) built.setDescription(description);
   if (url) built.setURL(url);
   if (thumbnail) built.setThumbnail(thumbnail);
+  else if (KIND_THUMB[kind]) built.setThumbnail(KIND_THUMB[kind]);
   else if (kind === 'sotw') built.setThumbnail(skillIconUrl('overall'));
   if (image) built.setImage(image);
   if (fields && fields.length) built.addFields(fields.filter(Boolean));
