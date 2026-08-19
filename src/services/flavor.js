@@ -53,7 +53,7 @@ const PROMPTS = {
 
 const FALLBACKS = {
   sotw_poll: { title: 'A Council of Skills is Convened!', description: 'The council is convened. Which skill shall we master this week? Lend your voice — your vote sets the trial.', color: 15105600 },
-  sotw_start: { title: 'The Trial Begins!', description: 'The gauntlet is thrown. A Skill of the Week trial commences now. Dedicate yourselves. The board is live.', color: 5763719 },
+  sotw_start: { title: 'The Trial of {skill} Begins!', description: 'The gauntlet is thrown. A Skill of the Week trial of **{skill}** commences now. Dedicate yourselves. The board is live.', color: 5763719 },
   sotw_end: { title: 'The Trial Concludes', description: 'The week is done. The board below is final.', color: 5763719 },
   sotw_standings: { title: 'The Board Stands', description: 'Here is the live Skill of the Week board.', color: 5763719 },
   raffle_start: { title: "Fortune's Favor is Upon Us!", description: 'The gods of chance have opened a raffle. A prize worthy of the clan sits on the table. Pay staff in game, link your RSN, then claim your ticket.', color: 15844367 },
@@ -133,7 +133,11 @@ async function announce(job, details = {}, extra = {}) {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.warn(`OpenAI ${job}: HTTP ${res.status} ${body.slice(0, 180)}`);
+      if (res.status === 429) {
+        console.warn('OpenAI quota empty. Add billing at https://platform.openai.com/settings/organization/billing — using Grazy fallback JSON.');
+      } else {
+        console.warn(`OpenAI ${job}: HTTP ${res.status} ${body.slice(0, 180)}`);
+      }
       return fallback;
     }
 

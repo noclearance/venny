@@ -137,7 +137,8 @@ async function getGroupCompetitions(groupId, limit = 10) {
 // ── Competition Endpoints ─────────────────────────────
 
 async function createCompetition({ title, metric, startsAt, endsAt, groupId, groupVerificationCode, participants }) {
-  const body = { title, metric, startsAt, endsAt };
+  const safeTitle = String(title || 'SOTW').trim().slice(0, 50);
+  const body = { title: safeTitle, metric, startsAt, endsAt };
   if (groupId) {
     body.groupId = groupId;
     body.groupVerificationCode = groupVerificationCode;

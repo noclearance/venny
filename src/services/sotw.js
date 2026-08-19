@@ -12,7 +12,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     return { success: false, error: `There's already an active SOTW (#${active.id}: ${active.skill}). End it first.` };
   }
 
-  const finalTitle = title || `SOTW: ${skill.toUpperCase()}`;
+  const finalTitle = String(title || `SOTW ${String(skill || '').toUpperCase()}`).trim().slice(0, 50);
   const startsAt = new Date().toISOString();
   const endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -58,11 +58,6 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   const card = await require('./flavor').write({
     job: 'sotw_start',
     facts: { skill, days: durationDays },
-    fallbackTitle: `${skill} SOTW`,
-    fallbackDescription: [
-      theme.line('sotwOpen', `${skill}-${result.lastInsertRowid}`),
-      'Gains from this second. First on the board when it ends takes the week.',
-    ].join('\n\n'),
   });
   const embed = theme.fromJson('sotw', card, {
     description: [card.description, tracking].join('\n\n'),
