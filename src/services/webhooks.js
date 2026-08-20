@@ -39,12 +39,17 @@ function startServer(client) {
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'GET' && (url === '/' || url === '/health')) {
       const ready = Boolean(client?.isReady?.());
-      if (url === '/health' && !ready) {
+      const starting = Date.now() - (client.bootAt || Date.now()) < 60_000;
+      if (!ready && !starting) {
         res.writeHead(503, { 'Content-Type': 'text/plain' }).end('discord offline');
         return;
       }
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end(ready ? 'venny ok' : 'venny starting');
       return;
+    }
+    if (url.startsWith('/api/')) {
+      const handled = await require('./api').handleApi(req, res, client);
+      if (handled) return;
     }
     if (req.method !== 'POST' || !url.startsWith('/hook/')) {
       res.writeHead(404).end('not found');
@@ -84,7 +89,7 @@ function startServer(client) {
   });
 
   server.listen(port, () => {
-    console.log(`Webhook server listening on :${port}  POST /hook/<token>`);
+    console.log(`HTTP :${port}  GET /health  POST /api/announce  POST /hook/<token>`);
   });
   return server;
 }
