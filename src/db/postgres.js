@@ -366,6 +366,7 @@ async function initPostgres(db) {
   await migrateColumn(db, 'bingo_tiles', 'notes', 'TEXT');
   await migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
   await migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
+  await migrateColumn(db, 'raffles', 'ends_at', 'TEXT');
 }
 
 module.exports = { wrapPg, initPostgres, getPool };

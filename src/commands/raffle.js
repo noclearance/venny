@@ -22,7 +22,16 @@ module.exports = {
       sub.setName('create')
         .setDescription('Create a new raffle with a button for entries')
         .addStringOption(opt => opt.setName('title').setDescription('Raffle title').setRequired(true))
+        .addIntegerOption(opt =>
+          opt.setName('hours')
+            .setDescription('How long entries stay open (then I draw)')
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(720))
         .addStringOption(opt => opt.setName('description').setDescription('What are you raffling?').setRequired(false))
+        .addStringOption(opt =>
+          opt.setName('until')
+            .setDescription('Optional exact close time (overrides hours), e.g. 2026-08-24 19:00'))
         .addIntegerOption(opt =>
           opt.setName('ticket_gp')
             .setDescription('In-game gold per ticket (default 150000)')
@@ -71,11 +80,29 @@ module.exports = {
       const description = interaction.options.getString('description') || 'Click the button below to enter!';
       const weightMode = interaction.options.getString('weight_mode') || 'none';
       const ticketGp = interaction.options.getInteger('ticket_gp') ?? DEFAULT_TICKET_GP;
+      const hours = interaction.options.getInteger('hours');
+      const untilStr = interaction.options.getString('until');
+
+      let endsAt;
+      if (untilStr) {
+        const { parseEventDate } = require('../services/timezone');
+        const parsed = await parseEventDate(untilStr, interaction.guildId);
+        if (!parsed) {
+          return interaction.reply({ content: 'Could not parse that close time. Try `2026-08-24 19:00` or skip until and use hours.', flags: 64 });
+        }
+        if (parsed <= new Date()) {
+          return interaction.reply({ content: 'Close time is in the past.', flags: 64 });
+        }
+        endsAt = parsed;
+      } else {
+        endsAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+      }
+      const endsIso = endsAt.toISOString();
 
       const result = await db.prepare(`
-        INSERT INTO raffles (guild_id, title, description, channel_id, created_by, weight_mode, ticket_gp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(interaction.guildId, title, description, interaction.channelId, interaction.user.id, weightMode, ticketGp);
+        INSERT INTO raffles (guild_id, title, description, channel_id, created_by, weight_mode, ticket_gp, ends_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(interaction.guildId, title, description, interaction.channelId, interaction.user.id, weightMode, ticketGp, endsIso);
 
       const raffleId = result.lastInsertRowid;
 
@@ -97,13 +124,14 @@ module.exports = {
       const fields = [
         prize ? theme.field('Prize', prize) : null,
         theme.field('Ticket', ticket, true),
+        theme.field('Closes', theme.when(endsIso), true),
         theme.field('Odds', weightMode !== 'none' ? `Weighted by ${weightMode}` : 'Equal', true),
         theme.field('How to enter', how),
         theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
       ];
       const made = await require('../services/cards').make('raffle', {
         job: 'raffle_start',
-        facts: { title, prize: prize || null, weighted: weightMode !== 'none' },
+        facts: { title, prize: prize || null, weighted: weightMode !== 'none', hours },
         fallbackTitle: title,
         fallbackDescription: theme.line('raffleOpen', raffleId),
         fields,
@@ -121,6 +149,7 @@ module.exports = {
         fields: [
           prize ? theme.field('Prize', prize) : null,
           theme.field('Ticket', ticketGp > 0 ? `${ticket} each` : 'Free', true),
+          theme.field('Closes', theme.when(endsIso), true),
           theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
         ],
         sourceChannelId: reply.channelId,
@@ -156,100 +185,15 @@ module.exports = {
         return interaction.reply({ content: `❌ Raffle #${id} has already been drawn. Winner: <@${raffle.winner_id}>`, flags: 64 });
       }
 
-      const entries = await db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(id);
-
-      if (entries.length === 0) {
-        return interaction.reply({ content: `❌ Raffle #${id} has no entries yet.`, flags: 64 });
+      const settled = await require('../services/raffleRun').settle(interaction.client, raffle);
+      if (settled.empty) {
+        return interaction.reply({ content: `Raffle #${id} had no entries. Closed with no winner.`, flags: 64 });
       }
-
-      let winner;
-      let weightInfo = '';
-
-      if (raffle.weight_mode && raffle.weight_mode !== 'none') {
-        const weights = [];
-        for (const entry of entries) {
-          let weight = 1;
-          let reason = 'base';
-
-          if (raffle.weight_mode === 'sotw' || raffle.weight_mode === 'activity') {
-            const sotwCount = await db.prepare(`
-              SELECT COUNT(*) as count FROM sotw_winners
-              WHERE guild_id = ? AND winner_rsn IN (
-                SELECT rsn FROM members WHERE guild_id = ? AND user_id = ?
-              )
-            `).get(interaction.guildId, interaction.guildId, entry.user_id);
-            const sotwWins = sotwCount?.count || 0;
-            weight += Math.min(sotwWins, 5);
-            if (sotwWins > 0) reason = `${sotwWins} SOTW wins`;
-          }
-
-          if (raffle.weight_mode === 'attendance' || raffle.weight_mode === 'activity') {
-            const attendanceCount = await db.prepare(`
-              SELECT COUNT(*) as count
-              FROM event_attendance ea
-              JOIN events e ON e.id = ea.event_id
-              WHERE ea.user_id = ? AND ea.status = ? AND e.guild_id = ?
-            `).get(entry.user_id, 'yes', interaction.guildId);
-            const attParticipation = attendanceCount?.count || 0;
-            weight += Math.min(attParticipation, 5);
-            if (attParticipation > 0) reason += (reason !== 'base' ? ', ' : '') + `${attParticipation} events attended`;
-          }
-
-          weights.push({ ...entry, weight: Math.min(weight, 10), reason });
-        }
-
-        const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
-        let random = Math.random() * totalWeight;
-        for (const w of weights) {
-          random -= w.weight;
-          if (random <= 0) {
-            winner = w;
-            break;
-          }
-        }
-        if (!winner) winner = weights[0];
-
-        weightInfo = `\n📊 Weighted by **${raffle.weight_mode}** — winner had weight ${winner.weight} (${winner.reason}) out of ${totalWeight} total`;
-      } else {
-        winner = entries[Math.floor(Math.random() * entries.length)];
-      }
-
-      await db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ?').run(winner.user_id, id);
-      await require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win', interaction.client);
-
-      const theme = require('../services/theme');
-      const made = await require('../services/cards').make('raffle', {
-        job: 'raffle_win',
-        facts: { title: raffle.title, prize: raffle.description, entries: entries.length },
-        fallbackTitle: `${raffle.title} — drawn`,
-        fallbackDescription: theme.line('raffleWon', raffle.id),
-        fields: [
-          theme.field('Winner', `<@${winner.user_id}>`, true),
-          theme.field('Entries', String(entries.length), true),
-          raffle.description && raffle.description !== 'Click the button below to enter!'
-            ? theme.field('Prize', raffle.description)
-            : null,
-          weightInfo.trim() ? theme.field('Odds', weightInfo.trim()) : null,
-        ],
-        footer: `Raffle #${id}  ·  Misclickers`,
-        timestamp: true,
+      await interaction.reply({
+        content: `Drawn. Winner is <@${settled.winner.user_id}>.`,
+        flags: 64,
       });
-      const drawMsg = await interaction.reply({
-        embeds: [made.embed],
-        fetchReply: true,
-      });
-      await require('../services/cards').publish(interaction.client, interaction.guildId, {
-        kind: 'raffle',
-        json: made.json,
-        fields: [
-          theme.field('Winner', `<@${winner.user_id}>`),
-          theme.field('Guild credits', require('../services/economy').payNote('raffle_win')),
-        ],
-        sourceChannelId: drawMsg.channelId,
-        sourceMessageId: drawMsg.id,
-        mention: `<@${winner.user_id}>`,
-      });
-      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${winner.user_id}>`);
+      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${settled.winner.user_id}>`);
       return;
     }
 

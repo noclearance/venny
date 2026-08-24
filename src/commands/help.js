@@ -24,9 +24,9 @@ module.exports = {
           '`/subscribe add` — pings for a category',
         ].join('\n')),
         theme.field('Boss of the Week', [
-          '`/vote botw` — pick the boss',
-          '`/boss week` — start tracking KC',
-          '`/boss kc` — clan KC board',
+          '`/vote botw` — pick the boss (can auto-start the hunt)',
+          '`/boss week` — start or show the live hunt (WOM KC, not a mass)',
+          '`/boss kc` — clan KC; period This BOTW uses the hunt window',
         ].join('\n')),
         theme.field('Raffle / bingo', '`/raffle create` `/draw` `/end`\n`/bingo create` `/start` · Claim a tile'),
         theme.field('Lookups', '`/member link` `/clan info` `/leaderboard` `/profile card` `/economy balance`'),

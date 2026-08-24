@@ -28,7 +28,7 @@ module.exports = {
         .addBooleanOption(opt => opt.setName('also_start_on_wom').setDescription('When votes close, start that skill on Wise Old Man and the calendar')))
     .addSubcommand(sub =>
       sub.setName('botw')
-        .setDescription('Poll for the next Boss of the Week')
+        .setDescription('Poll the next Boss of the Week (can auto-start the hunt)')
         .addBooleanOption(opt => opt.setName('random').setDescription('Yes = I pick the bosses. No = you pick them below.').setRequired(true))
         .addIntegerOption(opt => opt.setName('how_many').setDescription('If random: how many bosses (default 6)').setMinValue(3).setMaxValue(10))
         .addStringOption(opt => opt.setName('boss_1').setDescription('If not random: first boss').setAutocomplete(true))
@@ -41,7 +41,9 @@ module.exports = {
         .addStringOption(opt => opt.setName('boss_8').setDescription('Optional extra boss').setAutocomplete(true))
         .addStringOption(opt => opt.setName('boss_9').setDescription('Optional extra boss').setAutocomplete(true))
         .addStringOption(opt => opt.setName('boss_10').setDescription('Optional extra boss').setAutocomplete(true))
-        .addIntegerOption(opt => opt.setName('duration_hours').setDescription('How long the poll runs (default: 24 hours)').setMinValue(1).setMaxValue(168)))
+        .addIntegerOption(opt => opt.setName('duration_hours').setDescription('How long the poll runs (default: 24 hours)').setMinValue(1).setMaxValue(168))
+        .addIntegerOption(opt => opt.setName('week_days').setDescription('If it auto-starts, how many days the hunt lasts (default 7)').setMinValue(1).setMaxValue(30))
+        .addBooleanOption(opt => opt.setName('also_start').setDescription('When votes close, start that BOTW (default yes)')))
     .addSubcommand(sub =>
       sub.setName('generic')
         .setDescription('Create a generic poll with up to 10 options')
@@ -338,6 +340,8 @@ async function postAnnouncedPoll(interaction, { embed, poll }) {
 async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
   const theme = require('../services/theme');
   const durationHours = interaction.options.getInteger('duration_hours') || 24;
+  const weekDays = interaction.options.getInteger('week_days') || 7;
+  const autoStart = interaction.options.getBoolean('also_start') !== false;
   const endsAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
   const questionText = rolled
     ? 'Vote BOTW — I rolled these'
@@ -345,14 +349,16 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
 
   const made = await require('../services/cards').make('poll', {
     job: 'vote_botw',
-    facts: { rolled: Boolean(rolled), bosses: uniqueBosses },
+    facts: { rolled: Boolean(rolled), bosses: uniqueBosses, autoStart, days: weekDays },
     fallbackTitle: 'Boss of the Week',
     fallbackDescription: [
       'One vote. Pick the boss for next week.',
       rolled ? theme.line('voteRoll', Date.now()) : null,
     ].filter(Boolean).join('\n\n'),
     extraLines: [
-      'Winner is whoever the clan picks. After it closes, a mod starts it with `/boss week`. I do not auto-track KC off this poll yet.',
+      autoStart
+        ? `Winner becomes the hunt for **${weekDays} days**. KC from that moment. Not a calendar mass.`
+        : 'Votes only — will not start `/boss week`.',
     ],
     fields: [
       theme.field('Closes', theme.when(endsAt.toISOString()), true),
@@ -372,9 +378,19 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
   });
 
   const result = await db.prepare(`
-    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, created_by)
-    VALUES (?, 'botw', ?, ?, ?, ?, ?, 0, ?)
-  `).run(interaction.guildId, questionText, interaction.channelId, pollMsg.id, JSON.stringify(uniqueBosses), endsAt.toISOString(), interaction.user.id);
+    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
+    VALUES (?, 'botw', ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    interaction.guildId,
+    questionText,
+    interaction.channelId,
+    pollMsg.id,
+    JSON.stringify(uniqueBosses),
+    endsAt.toISOString(),
+    autoStart ? 1 : 0,
+    weekDays,
+    interaction.user.id
+  );
 
   await require('../services/cards').publish(interaction.client, interaction.guildId, {
     kind: 'poll',

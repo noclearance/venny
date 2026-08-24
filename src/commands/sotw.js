@@ -368,18 +368,30 @@ module.exports = {
     // ── Update ────────────────────────────────
     if (sub === 'update') {
       let sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const sotwSvc = require('../services/sotw');
 
       if (!sotw) {
-        return interaction.reply({ content: '❌ No active SOTW found.', flags: 64 });
+        await interaction.deferReply({ flags: 64 });
+        const adopted = await sotwSvc.adoptLiveFromWom({
+          guildId: interaction.guildId,
+          channelId: interaction.channelId,
+          createdBy: interaction.user.id,
+        });
+        if (!adopted.success) {
+          return interaction.editReply(adopted.error);
+        }
+        return interaction.editReply(
+          `Found the live WOM week **${adopted.sotw.skill}**: https://wiseoldman.net/competitions/${adopted.sotw.wom_competition_id}\nThe mass on the calendar is separate. First place still gets guild credits when this WOM week ends. \`/sotw standings\``
+        );
       }
 
       if (!sotw.wom_competition_id) {
         await interaction.deferReply({ flags: 64 });
-        const linked = await require('../services/sotw').linkWomIfMissing(sotw);
+        const linked = await sotwSvc.linkWomIfMissing(sotw);
         if (!linked.created) {
-          return interaction.editReply(`Discord week is live, but I still could not create WOM: ${linked.error || 'unknown'}`);
+          return interaction.editReply(`Could not attach WOM: ${linked.error || 'unknown'}`);
         }
-        return interaction.editReply(`Attached Wise Old Man: https://wiseoldman.net/competitions/${linked.sotw.wom_competition_id}\n\`/sotw standings\` when gains show.`);
+        return interaction.editReply(`Attached Wise Old Man: https://wiseoldman.net/competitions/${linked.sotw.wom_competition_id}\nYour mass event is unchanged. First place still gets **${require('../services/economy').coins('sotw_win')}** guild credits when the week ends.`);
       }
 
       if (!settings || !settings.wom_verif_code) {

@@ -152,7 +152,21 @@ async function tick(client) {
     console.error('Tracker tick failed:', err.message);
   }
 
-  await db.prepare('UPDATE botw SET ended = 1 WHERE ended = 0 AND ends_at <= ?').run(now);
+  const endedBotw = await db.prepare('SELECT * FROM botw WHERE ended = 0 AND ends_at <= ?').all(now);
+  for (const row of endedBotw) {
+    try {
+      await require('./botw').finalizeBotw(client, row);
+    } catch (err) {
+      console.error(`Failed to finalize BOTW ${row.id}:`, err.message);
+      await db.prepare('UPDATE botw SET ended = 1 WHERE id = ?').run(row.id);
+    }
+  }
+
+  try {
+    await require('./raffleRun').expireDue(client);
+  } catch (err) {
+    console.error('Raffle expire tick failed:', err.message);
+  }
 }
 
 async function finalizeSotw(client, sotw) {
@@ -302,6 +316,26 @@ async function finalizePoll(client, poll) {
         return;
       }
       results += `\n\nFailed to auto-start SOTW: ${sotwResult.error}`;
+    }
+
+    if (poll.type === 'botw' && poll.auto_start) {
+      const { startBotw, metricFromLabel } = require('./botw');
+      const boss = metricFromLabel(winner);
+      const botwResult = await startBotw({
+        guildId: poll.guild_id,
+        channelId: poll.channel_id,
+        createdBy: poll.created_by,
+        boss: boss || winner,
+        durationDays: poll.sotw_duration || 7,
+      });
+      if (botwResult.success) {
+        await channel.send({
+          content: `${results}\n\n**${winner}** won. Hunt is live.`,
+          embeds: [botwResult.embed],
+        });
+        return;
+      }
+      results += `\n\nFailed to auto-start BOTW: ${botwResult.error}`;
     }
 
     await channel.send(results);

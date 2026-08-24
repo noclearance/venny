@@ -24,7 +24,7 @@ const PROMPTS = {
   sotw_standings: details =>
     `Live Skill of the Week standings for **${details.skill || 'a skill'}**. ${details.onBoard || 0} on the board. One short rally line — do not list names.`,
   raffle_start: details =>
-    `A clan raffle is open. Grand prize: **${details.prize || details.title || 'a legendary boon'}**. Members pay staff in game, link an RSN, then tap Enter Raffle.`,
+    `A clan raffle is open. Grand prize: **${details.prize || details.title || 'a legendary boon'}**. ${details.hours ? `Entries close in **${details.hours} hours**, then I draw.` : 'I will draw when time is up.'} Members pay staff in game, link an RSN, then tap Enter Raffle.`,
   raffle_win: details =>
     `A raffle has been drawn. Title: ${details.title || 'the raffle'}. Prize: ${details.prize || 'the prize'}. ${details.entries || 0} entries. Do not invent the winner's name.`,
   raffle_end: details =>
@@ -42,7 +42,11 @@ const PROMPTS = {
   vote_generic: details =>
     `A clan vote. Question: ${details.question || 'a question'}. One vote on the original post.`,
   vote_botw: details =>
-    `Boss of the Week vote. Ballot: ${(details.bosses || []).join(', ') || 'the bosses'}. Rolled: ${Boolean(details.rolled)}.`,
+    `Boss of the Week vote. Ballot: ${(details.bosses || []).join(', ') || 'the bosses'}. Rolled: ${Boolean(details.rolled)}. Auto-start week: ${Boolean(details.autoStart)}.`,
+  botw_start: details =>
+    `Boss of the Week is **${details.boss || 'a boss'}** for ${details.days || 7} days. KC from this second counts.`,
+  botw_end: details =>
+    `Boss of the Week for **${details.boss || 'the boss'}** has ended.${details.winner ? ` Champion: **${details.winner}**.` : ''}`,
   vote_sotw: details =>
     `A Skill of the Week poll. Implore the clan to vote. Skills: ${(details.skills || []).join(', ') || 'the council will decide'}. Rolled: ${Boolean(details.rolled)}. Auto-start: ${Boolean(details.autoStart)}. Week length: ${details.days || 7} days.`,
   leaderboard_hiscores: details =>
@@ -65,7 +69,9 @@ const FALLBACKS = {
   event_soon: { title: 'Fifteen Minutes', description: 'Last call. Get to a bank and hop.', color: 16711680 },
   event_now: { title: 'It is Time', description: 'The event is up. Get in.', color: 16711680 },
   vote_generic: { title: 'The Clan Must Decide', description: 'A vote is open. One vote. Hit the poll on the original post.', color: 3447003 },
-  vote_botw: { title: 'A Hunt is Named', description: 'Vote the Boss of the Week. One vote. The clan picks the prey.', color: 3447003 },
+  vote_botw: { title: 'A Hunt is Named', description: 'Vote the Boss of the Week. One vote. The clan picks the prey. Winner becomes the week.', color: 3447003 },
+  botw_start: { title: 'The Hunt Begins', description: 'Boss of the Week is live. KC from this second counts.', color: 10038562 },
+  botw_end: { title: 'The Hunt Ends', description: 'Boss of the Week is closed. The board below is final.', color: 10038562 },
   vote_sotw: { title: 'A Council of Skills is Convened!', description: 'Vote the Skill of the Week. One vote. The winner becomes the trial.', color: 15105600 },
   leaderboard_hiscores: { title: 'Clan Hiscores', description: 'The current board.', color: 3447003 },
   leaderboard_gained: { title: 'Gains This Period', description: 'Who moved.', color: 5763719 },

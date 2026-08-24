@@ -34,7 +34,7 @@ async function handleRaffleEnter(interaction, db) {
   const raffleId = parseInt(interaction.customId.replace('raffle_enter_', ''), 10);
 
   const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND drawn = 0').get(raffleId);
-  if (!raffle) {
+  if (!raffle || !require('../services/raffleRun').stillOpen(raffle)) {
     return interaction.editReply({ content: 'This raffle is no longer active.' });
   }
 

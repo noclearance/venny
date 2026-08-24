@@ -4,6 +4,7 @@ const wom = require('../services/wom');
 const theme = require('../services/theme');
 const { BOSS_CHOICES, BOSSES, prettyMetric } = require('../osrs/catalog');
 const { isModerator } = require('../services/permissions');
+const botw = require('../services/botw');
 
 function resolveBoss(interaction) {
   return (interaction.options.getString('other') || interaction.options.getString('boss') || '').toLowerCase();
@@ -12,13 +13,14 @@ function resolveBoss(interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('boss')
-    .setDescription('Boss KC boards and Boss of the Week')
+    .setDescription('Boss of the Week KC — not a calendar mass')
     .addSubcommand(sub =>
       sub.setName('kc')
-        .setDescription('Clan KC hiscores or gained')
+        .setDescription('Clan KC hiscores, or this BOTW window if a week is live')
         .addStringOption(opt => opt.setName('boss').setDescription('Boss').setRequired(true).addChoices(...BOSS_CHOICES))
         .addStringOption(opt => opt.setName('other').setDescription('Or type a boss metric, e.g. scurrius'))
         .addStringOption(opt => opt.setName('period').setDescription('Gains period').addChoices(
+          { name: 'This BOTW (if live)', value: 'botw' },
           { name: 'Current KC', value: 'current' },
           { name: 'Day', value: 'day' },
           { name: 'Week', value: 'week' },
@@ -26,9 +28,9 @@ module.exports = {
         )))
     .addSubcommand(sub =>
       sub.setName('week')
-        .setDescription('Start or show Boss of the Week')
+        .setDescription('Start or show Boss of the Week (WOM KC, not /event)')
         .addStringOption(opt => opt.setName('boss').setDescription('Boss to start').addChoices(...BOSS_CHOICES))
-        .addIntegerOption(opt => opt.setName('days').setDescription('Length').setMinValue(1).setMaxValue(30))),
+        .addIntegerOption(opt => opt.setName('days').setDescription('How many days the hunt lasts').setMinValue(1).setMaxValue(30))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -42,35 +44,38 @@ module.exports = {
           return interaction.reply({ content: 'Mods start BOTW.', flags: 64 });
         }
         const days = interaction.options.getInteger('days') || 7;
-        await db.prepare('UPDATE botw SET ended = 1 WHERE guild_id = ? AND ended = 0').run(interaction.guildId);
-        const ends = new Date(Date.now() + days * 86400000).toISOString();
-        await db.prepare(`
-          INSERT INTO botw (guild_id, boss, starts_at, ends_at, channel_id, created_by)
-          VALUES (?, ?, datetime('now'), ?, ?, ?)
-        `).run(interaction.guildId, boss, ends, interaction.channelId, interaction.user.id);
-        return interaction.reply({
-          embeds: [theme.embed('danger', {
-            title: `Boss of the Week · ${prettyMetric(boss)}`,
-            description: [
-              `KC from this second until ${theme.when(ends)} counts.`,
-              `Check the board with \`/boss kc boss:${prettyMetric(boss)} period:Week\`.`,
-              'Linked RSN first or you are not on it.',
-            ].join('\n\n'),
-            thumbnail: theme.skillIconUrl('slayer'),
-            fields: [
-              theme.field('Boss', prettyMetric(boss), true),
-              theme.field('Ends', theme.when(ends), true),
-            ],
-          })],
+        const result = await botw.startBotw({
+          guildId: interaction.guildId,
+          channelId: interaction.channelId,
+          createdBy: interaction.user.id,
+          boss,
+          durationDays: days,
         });
+        if (!result.success) {
+          return interaction.reply({ content: result.error, flags: 64 });
+        }
+        const posted = await interaction.reply({ embeds: [result.embed], fetchReply: true });
+        await require('../services/cards').publish(interaction.client, interaction.guildId, {
+          kind: 'danger',
+          json: result.card,
+          sourceChannelId: posted.channelId,
+          sourceMessageId: posted.id,
+        });
+        return;
       }
       const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
-      if (!current) return interaction.reply({ content: 'No BOTW running. A mod can `/boss week boss:`.', flags: 64 });
+      if (!current) return interaction.reply({ content: 'No BOTW running. A mod can `/boss week boss:` after `/vote botw`, or start one here.', flags: 64 });
+      const board = await botw.kcBoard(settings, current);
       return interaction.reply({
         flags: 64,
         embeds: [theme.embed('danger', {
           title: `BOTW · ${prettyMetric(current.boss)}`,
-          description: `Ends ${theme.when(current.ends_at)}`,
+          description: [
+            `Ends ${theme.when(current.ends_at)}`,
+            board,
+            'This is Wise Old Man KC for the hunt window — not a `/event` mass.',
+          ].join('\n\n'),
+          thumbnail: theme.skillIconUrl('slayer'),
         })],
       });
     }
@@ -83,9 +88,26 @@ module.exports = {
       return interaction.reply({ content: 'Set a WOM group first.', flags: 64 });
     }
 
-    const period = interaction.options.getString('period') || 'current';
+    const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+    let period = interaction.options.getString('period') || 'current';
+    if (period === 'botw' || (period === 'week' && current && current.boss === boss)) {
+      period = 'botw';
+    }
     await interaction.deferReply({ flags: 64 });
     try {
+      if (period === 'botw') {
+        if (!current || current.boss !== boss) {
+          return interaction.editReply('No live BOTW for that boss. `/boss week` shows the hunt, or pick Day/Week/Month.');
+        }
+        const board = await botw.kcBoard(settings, current);
+        return interaction.editReply({
+          embeds: [theme.embed('danger', {
+            title: `${prettyMetric(boss)} · this BOTW`,
+            description: board,
+            fields: [theme.field('Ends', theme.when(current.ends_at), true)],
+          })],
+        });
+      }
       if (period === 'current') {
         const hiscores = await wom.getGroupHiscores(settings.wom_group_id, boss, 15);
         const lines = (hiscores || [])
@@ -118,4 +140,5 @@ module.exports = {
     }
   },
   publicSubs: ['week'],
+  staffSubs: [],
 };
