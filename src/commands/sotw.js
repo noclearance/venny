@@ -120,7 +120,12 @@ module.exports = {
       await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
         kind: 'sotw',
         job: 'sotw_start',
-        card,
+        card: {
+          ...card,
+          description: [card.description, result.womCompetitionId
+            ? `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${result.womCompetitionId}).`
+            : 'Discord week is live. Wise Old Man did not get a competition — `/sotw update` to attach one.'].join('\n\n'),
+        },
         fields: [
           theme.field('Guild credits', require('../services/economy').payNote('sotw_win')),
         ],
@@ -131,17 +136,33 @@ module.exports = {
       return;
     }
 
-    // ── Standings / Current ────────────────────
-    if (sub === 'standings' || sub === 'current') {
-      let sotw;
-      if (sub === 'standings') {
-        const id = interaction.options.getInteger('id');
-        sotw = id
-          ? await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ?').get(id, interaction.guildId)
-          : await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
-      } else {
-        sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+    // ── Current ────────────────────────────────
+    if (sub === 'current') {
+      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      if (!sotw) {
+        return interaction.reply({ content: 'No SOTW running. A mod can `/sotw start`.', flags: 64 });
       }
+      const theme = require('../services/theme');
+      const womLine = sotw.wom_competition_id
+        ? `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${sotw.wom_competition_id}). \`/sotw standings\` for the board.`
+        : 'This Discord week **is** live. Wise Old Man never got a competition (title too long, missing `/config`, or WOM 400). `/sotw update` tries to attach one.';
+      return interaction.reply({
+        embeds: [theme.embed('sotw', {
+          title: `${sotw.skill} SOTW`,
+          description: [theme.line('sotwOpen', sotw.id), theme.when(sotw.ends_at), womLine, `ID #${sotw.id}`].join('\n\n'),
+          thumbnail: theme.skillIconUrl(sotw.skill),
+          url: sotw.wom_competition_id ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}` : undefined,
+        })],
+        flags: 64,
+      });
+    }
+
+    // ── Standings ──────────────────────────────
+    if (sub === 'standings') {
+      const id = interaction.options.getInteger('id');
+      const sotw = id
+        ? await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ?').get(id, interaction.guildId)
+        : await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
 
       if (!sotw) {
         return interaction.reply({ content: '❌ No active SOTW found. Start one with `/sotw start`.', flags: 64 });
@@ -150,7 +171,9 @@ module.exports = {
       await interaction.deferReply({ flags: 64 });
 
       if (!sotw.wom_competition_id) {
-        return interaction.editReply('This SOTW is not linked to a WOM competition. Cannot fetch live standings.');
+        return interaction.editReply(
+          `**${sotw.skill}** SOTW #${sotw.id} is running in Discord until ${require('../services/theme').when(sotw.ends_at)}.\n\nWise Old Man never got a competition for this week, so I cannot fetch XP. A mod can \`/sotw update\` to attach WOM, or \`/sotw cancel\` and start again.`
+        );
       }
 
       try {
@@ -283,7 +306,10 @@ module.exports = {
       }
 
       if (!sotw.wom_competition_id) {
-        return interaction.reply({ content: '❌ This SOTW is not linked to a WOM competition.', flags: 64 });
+        return interaction.reply({
+          content: `**${sotw.skill}** is the live Discord SOTW, but it was never created on Wise Old Man — I have no XP to show. A mod can \`/sotw update\`.`,
+          flags: 64,
+        });
       }
 
       await interaction.deferReply({ flags: 64 });
@@ -357,14 +383,23 @@ module.exports = {
 
     // ── Update ────────────────────────────────
     if (sub === 'update') {
-      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      let sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
 
-      if (!sotw || !sotw.wom_competition_id) {
-        return interaction.reply({ content: '❌ No active WOM-linked SOTW found.', flags: 64 });
+      if (!sotw) {
+        return interaction.reply({ content: '❌ No active SOTW found.', flags: 64 });
+      }
+
+      if (!sotw.wom_competition_id) {
+        await interaction.deferReply({ flags: 64 });
+        const linked = await require('../services/sotw').linkWomIfMissing(sotw);
+        if (!linked.created) {
+          return interaction.editReply(`Discord week is live, but I still could not create WOM: ${linked.error || 'unknown'}`);
+        }
+        return interaction.editReply(`Attached Wise Old Man: https://wiseoldman.net/competitions/${linked.sotw.wom_competition_id}\n\`/sotw standings\` when gains show.`);
       }
 
       if (!settings || !settings.wom_verif_code) {
-        return interaction.reply({ content: '❌ No WOM verification code configured. Set WOM_VERIFICATION_CODE in .env.', flags: 64 });
+        return interaction.reply({ content: '❌ No WOM verification code configured. Set it with `/config wom-verification`.', flags: 64 });
       }
 
       await interaction.deferReply({ flags: 64 });

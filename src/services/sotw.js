@@ -95,4 +95,32 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card };
 }
 
-module.exports = { startSotw };
+async function linkWomIfMissing(sotw) {
+  if (!sotw || sotw.wom_competition_id) return { sotw, created: false };
+  const db = getDb();
+  const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(sotw.guild_id);
+  if (!settings?.wom_group_id || !settings?.wom_verif_code) {
+    return { sotw, created: false, error: 'Set `/config wom-group` and `/config wom-verification` first.' };
+  }
+  const title = `SOTW ${String(sotw.skill || '').toUpperCase()}`.slice(0, 50);
+  try {
+    const comp = await wom.createCompetition({
+      title,
+      metric: sotw.skill,
+      startsAt: sotw.starts_at,
+      endsAt: sotw.ends_at,
+      groupId: settings.wom_group_id,
+      groupVerificationCode: settings.wom_verif_code,
+    });
+    const id = comp.competition?.id;
+    if (!id) return { sotw, created: false, error: 'WOM did not return a competition id.' };
+    await db.prepare('UPDATE sotw SET wom_competition_id = ? WHERE id = ?').run(id, sotw.id);
+    console.log(`Linked WOM competition ${id} to SOTW #${sotw.id}`);
+    return { sotw: { ...sotw, wom_competition_id: id }, created: true };
+  } catch (err) {
+    console.error('Failed to link WOM competition:', err.message);
+    return { sotw, created: false, error: err.message };
+  }
+}
+
+module.exports = { startSotw, linkWomIfMissing };
