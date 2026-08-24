@@ -80,6 +80,9 @@ function startServer(client) {
         });
         if (body.image_url) embed.setImage(String(body.image_url));
         await channel.send({ embeds: [embed] });
+        require('./aisBot').ingestIncoming(hook, body).catch(err => {
+          console.warn(`AIS ingest hook: ${err.message}`);
+        });
         res.writeHead(204).end();
       } catch (err) {
         console.error('Webhook post failed:', err.message);

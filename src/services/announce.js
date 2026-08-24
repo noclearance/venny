@@ -38,7 +38,7 @@ async function broadcast(client, guildId, {
 
   try {
     const channel = await client.channels.fetch(channelId);
-    return channel.send({
+    const posted = await channel.send({
       content: mention || undefined,
       allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] },
       embeds: [theme.fromJson(kind, json, {
@@ -47,6 +47,17 @@ async function broadcast(client, guildId, {
         timestamp: true,
       })],
     });
+    require('./aisBot').webhook({
+      type: 'webhook',
+      guild_id: guildId,
+      kind,
+      job: job || null,
+      title: json.title || title || null,
+      description: json.description || description || null,
+      jump,
+      ts: new Date().toISOString(),
+    }).catch(err => console.warn(`AIS webhook: ${err.message}`));
+    return posted;
   } catch (err) {
     console.warn(`Announce channel failed: ${err.message}`);
     if (/Missing Access|Unknown Channel|Missing Permissions/i.test(err.message || '')) {

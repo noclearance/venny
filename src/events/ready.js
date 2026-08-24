@@ -13,5 +13,8 @@ module.exports = {
     });
     startReminderPoller(client);
     console.log('⏰ Reminder poller started');
+    require('../services/aisBot').startEventStream(event => {
+      console.log(`AIS stream event: ${event?.type || 'unknown'}`);
+    });
   },
 };

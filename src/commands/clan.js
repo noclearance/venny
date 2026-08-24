@@ -153,6 +153,17 @@ module.exports = {
 
         await interaction.editReply(response);
         await audit(interaction.client, interaction.guildId, `Clan sync: ${synced} WOM members, ${linked} linked, by <@${interaction.user.id}>`);
+        require('../services/aisBot').sync({
+          type: 'sync',
+          guild_id: interaction.guildId,
+          source: 'clan_sync',
+          wom_group_id: settings.wom_group_id,
+          synced,
+          linked,
+          unlinked: unlinked.length,
+          unlinked_sample: unlinked.slice(0, 25),
+          ts: now,
+        }).catch(err => console.warn(`AIS sync: ${err.message}`));
       } catch (err) {
         await interaction.editReply(`❌ Sync failed: ${err.message}`);
       }

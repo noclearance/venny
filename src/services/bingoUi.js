@@ -83,6 +83,15 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
     proof: proof || null,
     status: 'pending',
   });
+  require('./aisBot').drop({
+    type: 'drop',
+    guild_id: interaction.guildId,
+    user_id: interaction.user.id,
+    bingo_id: card.id,
+    tile: tile.label,
+    proof: proof || null,
+    ts: new Date().toISOString(),
+  }).catch(err => console.warn(`AIS drop: ${err.message}`));
   await replyFlags(interaction, {
     content: `🟨 Claimed **${tile.label}**. Waiting on a mod.`,
     flags: 64,
