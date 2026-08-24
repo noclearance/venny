@@ -25,7 +25,7 @@ module.exports = {
         .addStringOption(opt => opt.setName('skill_10').setDescription('Optional extra skill').addChoices(...SKILL_CHOICES))
         .addIntegerOption(opt => opt.setName('duration_hours').setDescription('How long people can vote (default 24 hours)').setMinValue(1).setMaxValue(168))
         .addIntegerOption(opt => opt.setName('sotw_duration_days').setDescription('If it starts on WOM, how many days the week lasts').setMinValue(1).setMaxValue(30))
-        .addBooleanOption(opt => opt.setName('also_start_on_wom').setDescription('When votes close, start that skill on Wise Old Man and the calendar')))
+        .addBooleanOption(opt => opt.setName('also_start_on_wom').setDescription('When votes close, start that skill on Wise Old Man (not a calendar mass)')))
     .addSubcommand(sub =>
       sub.setName('botw')
         .setDescription('Poll the next Boss of the Week (can auto-start the hunt)')
@@ -92,7 +92,7 @@ module.exports = {
         if (message.poll?.end) await message.poll.end().catch(() => {});
       } catch { /* poll message may already be gone */ }
       return interaction.reply({
-        content: `Poll **#${id}** is cancelled. It will not start a SOTW or update Wise Old Man.`,
+        content: `Poll **#${id}** is cancelled. It will not start a SOTW or BOTW.`,
         flags: 64,
       });
     }
@@ -237,8 +237,8 @@ module.exports = {
 
         if (poll.finalized && poll.winner) {
           response += `\n✅ Winner: **${poll.winner}**`;
-          if (poll.type === 'sotw' && poll.auto_start) {
-            response += ` — SOTW was auto-started!`;
+          if (poll.auto_start && (poll.type === 'sotw' || poll.type === 'botw')) {
+            response += poll.type === 'sotw' ? ' — SOTW was auto-started!' : ' — BOTW was auto-started!';
           }
         }
 
@@ -378,7 +378,7 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
   });
 
   const result = await db.prepare(`
-    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
+    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, duration_days, created_by)
     VALUES (?, 'botw', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     interaction.guildId,
@@ -433,7 +433,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     ].filter(Boolean).join('\n\n'),
     extraLines: [
       autoStart
-        ? `Winner goes on Wise Old Man and the clan calendar for **${sotwDuration} days**. Gains count from that moment. \`/sotw me\` after it starts.`
+        ? `Winner goes on Wise Old Man for **${sotwDuration} days**. Gains count from that moment. Not a calendar mass. \`/sotw me\` after it starts.`
         : 'Votes only — this will not start a week on Wise Old Man.',
     ],
     fields: [
@@ -456,7 +456,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
   });
 
   const result = await db.prepare(`
-    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
+    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, duration_days, created_by)
     VALUES (?, 'sotw', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     interaction.guildId,

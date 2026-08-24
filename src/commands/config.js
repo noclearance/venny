@@ -4,11 +4,49 @@ const { isAdmin, ADMIN_PERMISSION } = require('../services/permissions');
 const { isValidTimezone } = require('../services/timezone');
 const { audit } = require('../services/audit');
 
-module.exports = {
-  data: new SlashCommandBuilder()
+const CHANNEL_SLOTS = [
+  {
+    key: 'announce_channel',
+    sub: 'announce-channel',
+    description: 'Clan-wide board: events, raffles, SOTW, votes, bingo, 99s',
+    option: 'Announce channel',
+    setCopy: 'Announce channel is',
+    auditCopy: 'Announce channel',
+  },
+  {
+    key: 'reminder_channel',
+    sub: 'reminder-channel',
+    description: 'Set the default channel for event reminders',
+    option: 'Channel for reminders',
+    setCopy: 'Default reminder channel set to',
+    auditCopy: 'Reminder channel',
+  },
+  {
+    key: 'audit_channel',
+    sub: 'audit-channel',
+    description: 'Set the channel for action logs (event cancel, raffle draw, SOTW end)',
+    option: 'Channel for audit logs',
+    setCopy: 'Audit log channel set to',
+    auditCopy: 'Audit channel',
+  },
+];
+
+function missingChannelSlots(settings = {}) {
+  return CHANNEL_SLOTS.filter(slot => !settings[slot.key]);
+}
+
+function assignedChannelSlots(settings = {}) {
+  return CHANNEL_SLOTS.filter(slot => settings[slot.key]);
+}
+
+function buildData(settings = {}) {
+  const cmd = new SlashCommandBuilder()
     .setName('config')
     .setDescription('Configure bot settings for this server')
     .setDefaultMemberPermissions(ADMIN_PERMISSION)
+    .addSubcommand(sub =>
+      sub.setName('view')
+        .setDescription('View current configuration'))
     .addSubcommand(sub =>
       sub.setName('wom-group')
         .setDescription('Set the Wise Old Man group ID for your clan')
@@ -17,14 +55,6 @@ module.exports = {
       sub.setName('wom-verification')
         .setDescription('Set the WOM verification code (needed for auto-creating SOTW competitions)')
         .addStringOption(opt => opt.setName('code').setDescription('Verification code from WOM group settings').setRequired(true)))
-    .addSubcommand(sub =>
-      sub.setName('reminder-channel')
-        .setDescription('Set the default channel for event reminders')
-        .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reminders').setRequired(true)))
-    .addSubcommand(sub =>
-      sub.setName('audit-channel')
-        .setDescription('Set the channel for action logs (event cancel, raffle draw, SOTW end)')
-        .addChannelOption(opt => opt.setName('channel').setDescription('Channel for audit logs').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('timezone')
         .setDescription('Set the server timezone for event scheduling')
@@ -39,15 +69,45 @@ module.exports = {
           { name: 'Skilling', value: 'skilling' },
           { name: 'Social', value: 'social' },
         ))
-        .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)))
-    .addSubcommand(sub =>
-      sub.setName('announce-channel')
-        .setDescription('Clan-wide board: events, raffles, SOTW, votes, bingo, 99s')
-        .addChannelOption(opt => opt.setName('channel').setDescription('Announce channel').setRequired(true)))
-    .addSubcommand(sub =>
-      sub.setName('view')
-        .setDescription('View current configuration')),
+        .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)));
 
+  for (const slot of missingChannelSlots(settings)) {
+    cmd.addSubcommand(sub =>
+      sub.setName(slot.sub)
+        .setDescription(slot.description)
+        .addChannelOption(opt => opt.setName('channel').setDescription(slot.option).setRequired(true)));
+  }
+
+  if (assignedChannelSlots(settings).length) {
+    cmd.addSubcommand(sub =>
+      sub.setName('clear-channel')
+        .setDescription('Unassign a bot channel so its setup command comes back')
+        .addStringOption(opt =>
+          opt.setName('which')
+            .setDescription('Which channel to unassign')
+            .setRequired(true)
+            .addChoices(...assignedChannelSlots(settings).map(slot => ({
+              name: slot.sub,
+              value: slot.key,
+            })))));
+  }
+
+  return cmd;
+}
+
+async function refreshCommands(guildId) {
+  try {
+    await require('../deploy-commands').syncGuildCommands(guildId);
+  } catch (err) {
+    console.warn(`Config command refresh: ${err.message}`);
+  }
+}
+
+module.exports = {
+  data: buildData(),
+  buildData,
+  missingChannelSlots,
+  CHANNEL_SLOTS,
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
@@ -72,19 +132,32 @@ module.exports = {
       return;
     }
 
-    if (sub === 'reminder-channel') {
+    const channelSlot = CHANNEL_SLOTS.find(slot => slot.sub === sub);
+    if (channelSlot) {
       const channel = interaction.options.getChannel('channel');
-      await db.prepare('UPDATE guild_settings SET reminder_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply({ content: `Default reminder channel set to ${channel}.`, flags: 64 });
-      await audit(interaction.client, interaction.guildId, `Reminder channel set to <#${channel.id}> by <@${interaction.user.id}>`);
+      await db.prepare(`UPDATE guild_settings SET ${channelSlot.key} = ? WHERE guild_id = ?`).run(channel.id, interaction.guildId);
+      await interaction.reply({
+        content: `${channelSlot.setCopy} ${channel}. That setup command drops out of the slash menu now. \`/config view\` still works. \`/config clear-channel\` brings it back.`,
+        flags: 64,
+      });
+      await audit(interaction.client, interaction.guildId, `${channelSlot.auditCopy} set to <#${channel.id}> by <@${interaction.user.id}>`);
+      await refreshCommands(interaction.guildId);
       return;
     }
 
-    if (sub === 'audit-channel') {
-      const channel = interaction.options.getChannel('channel');
-      await db.prepare('UPDATE guild_settings SET audit_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply({ content: `Audit log channel set to ${channel}.`, flags: 64 });
-      await audit(interaction.client, interaction.guildId, `Audit channel set to <#${channel.id}> by <@${interaction.user.id}>`);
+    if (sub === 'clear-channel') {
+      const which = interaction.options.getString('which');
+      const slot = CHANNEL_SLOTS.find(s => s.key === which);
+      if (!slot) {
+        return interaction.reply({ content: 'Unknown channel slot.', flags: 64 });
+      }
+      await db.prepare(`UPDATE guild_settings SET ${slot.key} = NULL WHERE guild_id = ?`).run(interaction.guildId);
+      await interaction.reply({
+        content: `${slot.auditCopy} unassigned. \`/config ${slot.sub}\` is back in the slash menu.`,
+        flags: 64,
+      });
+      await audit(interaction.client, interaction.guildId, `${slot.auditCopy} cleared by <@${interaction.user.id}>`);
+      await refreshCommands(interaction.guildId);
       return;
     }
 
@@ -109,16 +182,9 @@ module.exports = {
       return;
     }
 
-    if (sub === 'announce-channel') {
-      const channel = interaction.options.getChannel('channel');
-      await db.prepare('UPDATE guild_settings SET announce_channel = ? WHERE guild_id = ?').run(channel.id, interaction.guildId);
-      await interaction.reply({ content: `Announce channel is ${channel}. Events, raffles, SOTW, votes, bingo, and 99s get posted there.`, flags: 64 });
-      await audit(interaction.client, interaction.guildId, `Announce channel set to <#${channel.id}> by <@${interaction.user.id}>`);
-      return;
-    }
-
     if (sub === 'view') {
-      const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+      const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId) || {};
+      const missing = missingChannelSlots(settings);
 
       let response = '**Server Configuration:**\n\n';
       response += `WOM Group ID: ${settings.wom_group_id || 'Not set'}\n`;
@@ -127,6 +193,12 @@ module.exports = {
       response += `Audit Channel: ${settings.audit_channel ? `<#${settings.audit_channel}>` : 'Not set'}\n`;
       response += `Announce Channel: ${settings.announce_channel ? `<#${settings.announce_channel}>` : 'Not set'}\n`;
       response += `Timezone: ${settings.timezone || 'UTC (default)'}\n`;
+
+      if (missing.length) {
+        response += `\nStill need: ${missing.map(s => `\`/config ${s.sub}\``).join(', ')}`;
+      } else {
+        response += '\nChannel setup commands are hidden. `/config clear-channel` brings one back if you need to move it.';
+      }
 
       if (settings.wom_group_id) {
         response += `\n[WOM Group Page](https://wiseoldman.net/groups/${settings.wom_group_id})`;

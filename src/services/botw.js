@@ -10,6 +10,36 @@ function metricFromLabel(label) {
   return null;
 }
 
+function parseKcRows(gained) {
+  return (gained || [])
+    .map(row => ({
+      name: row.player?.displayName,
+      gained: Number(row.data?.gained ?? row.data?.kills?.gained ?? row.data?.kills ?? 0) || 0,
+    }))
+    .filter(row => row.gained > 0)
+    .sort((a, b) => b.gained - a.gained);
+}
+
+function formatBoard(rows) {
+  const theme = require('./theme');
+  const lines = rows.slice(0, 10)
+    .map((row, i) => `${theme.medal(i)} **${row.name}** — +${row.gained.toLocaleString()} KC`);
+  return lines.join('\n') || 'No KC this BOTW yet.';
+}
+
+async function huntRows(settings, botw) {
+  if (!settings?.wom_group_id || !botw) return [];
+  const wom = require('./wom');
+  const gained = await wom.getGroupGainedByDate(
+    settings.wom_group_id,
+    botw.boss,
+    botw.starts_at,
+    botw.ends_at,
+    15,
+  );
+  return parseKcRows(gained);
+}
+
 async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7 }) {
   const db = getDb();
   const key = String(boss || '').toLowerCase().replace(/\s+/g, '_');
@@ -17,7 +47,14 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
     return { success: false, error: `Unknown boss \`${boss}\`.` };
   }
 
-  await db.prepare('UPDATE botw SET ended = 1 WHERE guild_id = ? AND ended = 0').run(guildId);
+  const active = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(guildId);
+  if (active) {
+    return {
+      success: false,
+      error: `There's already a BOTW (#${active.id}: ${prettyMetric(active.boss)}). \`/boss end\` it first.`,
+    };
+  }
+
   const startsAt = new Date().toISOString();
   const endsAt = new Date(Date.now() + durationDays * 86400000).toISOString();
   const result = await db.prepare(`
@@ -54,26 +91,9 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
 }
 
 async function kcBoard(settings, botw) {
-  const wom = require('./wom');
-  const theme = require('./theme');
   if (!settings?.wom_group_id || !botw) return 'Set a WOM group to see KC.';
   try {
-    const gained = await wom.getGroupGainedByDate(
-      settings.wom_group_id,
-      botw.boss,
-      botw.starts_at,
-      botw.ends_at,
-      15,
-    );
-    const lines = (gained || [])
-      .map(row => {
-        const n = row.data?.gained ?? row.data?.kills?.gained ?? row.data?.kills ?? 0;
-        return { name: row.player?.displayName, gained: Number(n) || 0 };
-      })
-      .filter(row => row.gained > 0)
-      .slice(0, 10)
-      .map((row, i) => `${theme.medal(i)} **${row.name}** — +${row.gained.toLocaleString()} KC`);
-    return lines.join('\n') || 'No KC this BOTW yet.';
+    return formatBoard(await huntRows(settings, botw));
   } catch (err) {
     return `WOM: ${err.message}`;
   }
@@ -81,32 +101,21 @@ async function kcBoard(settings, botw) {
 
 async function finalizeBotw(client, botw) {
   const db = getDb();
+  if (Number(botw.ended)) return;
+  const claimed = await db.prepare('UPDATE botw SET ended = 1 WHERE id = ? AND ended = 0').run(botw.id);
+  if (!claimed.changes) return;
   const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(botw.guild_id);
-  const board = await kcBoard(settings, botw);
-  let winnerRsn = null;
+  let rows = [];
   try {
-    const wom = require('./wom');
-    if (settings?.wom_group_id) {
-      const gained = await wom.getGroupGainedByDate(
-        settings.wom_group_id,
-        botw.boss,
-        botw.starts_at,
-        botw.ends_at,
-        15,
-      );
-      const sorted = (gained || [])
-        .map(row => ({
-          name: row.player?.displayName,
-          gained: Number(row.data?.gained ?? row.data?.kills?.gained ?? row.data?.kills ?? 0) || 0,
-        }))
-        .filter(row => row.gained > 0)
-        .sort((a, b) => b.gained - a.gained);
-      if (sorted[0]) winnerRsn = sorted[0].name;
-    }
+    rows = await huntRows(settings, botw);
   } catch (err) {
     console.warn(`BOTW results ${botw.id}: ${err.message}`);
   }
 
+  const winnerRsn = rows[0]?.name || null;
+  const board = settings?.wom_group_id
+    ? formatBoard(rows)
+    : 'Set a WOM group to see KC.';
   const theme = require('./theme');
   const made = await require('./cards').make('danger', {
     job: 'botw_end',
@@ -133,7 +142,6 @@ async function finalizeBotw(client, botw) {
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(botw.guild_id, winnerRsn);
     if (winner) await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client);
   }
-  await db.prepare('UPDATE botw SET ended = 1 WHERE id = ?').run(botw.id);
 }
 
 module.exports = { startBotw, kcBoard, finalizeBotw, metricFromLabel };

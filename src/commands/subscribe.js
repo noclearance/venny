@@ -1,43 +1,38 @@
 const { SlashCommandBuilder } = require('discord.js');
 const subs = require('../services/subscriptions');
 
+const MASS_CHOICES = [
+  { name: 'General', value: 'general' },
+  { name: 'Boss Masses', value: 'boss' },
+  { name: 'PvM', value: 'pvm' },
+  { name: 'Skilling', value: 'skilling' },
+  { name: 'Social', value: 'social' },
+  { name: 'Raffles', value: 'raffle' },
+];
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('subscribe')
-    .setDescription('Subscribe to event categories to get pinged for relevant events')
+    .setDescription('Pings for calendar masses — not SOTW or BOTW')
     .addSubcommand(sub =>
       sub.setName('add')
-        .setDescription('Subscribe to an event category')
+        .setDescription('Subscribe to a mass category')
         .addStringOption(opt =>
           opt.setName('category')
-            .setDescription('Which event type to subscribe to')
+            .setDescription('Which mass type to subscribe to')
             .setRequired(true)
-            .addChoices(
-              { name: 'General', value: 'general' },
-              { name: 'Boss Masses', value: 'boss' },
-              { name: 'PvM', value: 'pvm' },
-              { name: 'Skilling', value: 'skilling' },
-              { name: 'Social', value: 'social' },
-              { name: 'SOTW', value: 'sotw' },
-              { name: 'BOTW', value: 'botw' },
-              { name: 'Raffles', value: 'raffle' },
-            )))
+            .addChoices(...MASS_CHOICES)))
     .addSubcommand(sub =>
       sub.setName('remove')
-        .setDescription('Unsubscribe from an event category')
+        .setDescription('Unsubscribe from a category')
         .addStringOption(opt =>
           opt.setName('category')
-            .setDescription('Which event type to unsubscribe from')
+            .setDescription('Which type to unsubscribe from')
             .setRequired(true)
             .addChoices(
-              { name: 'General', value: 'general' },
-              { name: 'Boss Masses', value: 'boss' },
-              { name: 'PvM', value: 'pvm' },
-              { name: 'Skilling', value: 'skilling' },
-              { name: 'Social', value: 'social' },
-              { name: 'SOTW', value: 'sotw' },
-              { name: 'BOTW', value: 'botw' },
-              { name: 'Raffles', value: 'raffle' },
+              ...MASS_CHOICES,
+              { name: 'SOTW (legacy)', value: 'sotw' },
+              { name: 'BOTW (legacy)', value: 'botw' },
             )))
     .addSubcommand(sub =>
       sub.setName('list')

@@ -152,6 +152,7 @@ async function initPostgres(db) {
       ends_at TEXT NOT NULL,
       auto_start INTEGER DEFAULT 0,
       sotw_duration INTEGER DEFAULT 7,
+      duration_days INTEGER DEFAULT 7,
       finalized INTEGER DEFAULT 0,
       winner TEXT,
       created_by TEXT NOT NULL,
@@ -367,6 +368,8 @@ async function initPostgres(db) {
   await migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
   await migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
   await migrateColumn(db, 'raffles', 'ends_at', 'TEXT');
+  await migrateColumn(db, 'polls', 'duration_days', 'INTEGER');
+  await db.exec('UPDATE polls SET duration_days = sotw_duration WHERE duration_days IS NULL');
 }
 
 module.exports = { wrapPg, initPostgres, getPool };

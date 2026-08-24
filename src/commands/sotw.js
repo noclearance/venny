@@ -13,7 +13,7 @@ module.exports = {
     .setDescription('Wise Old Man Skill of the Week — not a calendar mass')
     .addSubcommand(sub =>
       sub.setName('start')
-        .setDescription('Open a WOM competition for a skill this week')
+        .setDescription('Open a WOM week (attaches a live matching competition if one exists)')
         .addStringOption(opt =>
           opt.setName('skill')
             .setDescription('Which skill to compete in')
@@ -387,11 +387,12 @@ module.exports = {
 
       if (!sotw.wom_competition_id) {
         await interaction.deferReply({ flags: 64 });
-        const linked = await sotwSvc.linkWomIfMissing(sotw);
-        if (!linked.created) {
+        const linked = await sotwSvc.ensureWomWeek(sotw);
+        if (!linked.sotw?.wom_competition_id) {
           return interaction.editReply(`Could not attach WOM: ${linked.error || 'unknown'}`);
         }
-        return interaction.editReply(`Attached Wise Old Man: https://wiseoldman.net/competitions/${linked.sotw.wom_competition_id}\nYour mass event is unchanged. First place still gets **${require('../services/economy').coins('sotw_win')}** guild credits when the week ends.`);
+        const how = linked.adopted ? 'Attached the live WOM week' : 'Created a WOM competition';
+        return interaction.editReply(`${how}: https://wiseoldman.net/competitions/${linked.sotw.wom_competition_id}\nYour mass event is unchanged. First place still gets **${require('../services/economy').coins('sotw_win')}** guild credits when the week ends.`);
       }
 
       if (!settings || !settings.wom_verif_code) {

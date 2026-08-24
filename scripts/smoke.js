@@ -70,12 +70,71 @@ check('sotw staff subs', () => {
   }
 });
 
-const { statusOf } = require('../src/services/sotw');
+const { statusOf, pickLiveCompetition } = require('../src/services/sotw');
 check('sotw statusOf', () => {
   assert.strictEqual(statusOf(null), 'ended');
   assert.strictEqual(statusOf({ ended: 1 }), 'ended');
   assert.strictEqual(statusOf({ ended: 0, wom_competition_id: 99 }), 'wom');
   assert.strictEqual(statusOf({ ended: 0, wom_competition_id: null }), 'local');
+});
+
+check('pickLiveCompetition does not attach the wrong skill', () => {
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const past = new Date(Date.now() - 86400000).toISOString();
+  const agility = { id: 1, metric: 'agility', startsAt: past, endsAt: future };
+  const fishing = { id: 2, metric: 'fishing', startsAt: past, endsAt: future };
+  assert.strictEqual(pickLiveCompetition([agility], 'fishing'), null);
+  assert.strictEqual(pickLiveCompetition([agility, fishing], 'fishing').id, 2);
+  assert.strictEqual(pickLiveCompetition([agility], null).id, 1);
+  assert.strictEqual(pickLiveCompetition([{ id: 3, metric: 'agility', endsAt: past }]), null);
+});
+
+const { stillOpen } = require('../src/services/raffleRun');
+check('raffle stillOpen', () => {
+  assert.strictEqual(stillOpen({ drawn: 1, ends_at: new Date(Date.now() + 3600000).toISOString() }), false);
+  assert.strictEqual(stillOpen({ drawn: 0, ends_at: new Date(Date.now() - 3600000).toISOString() }), false);
+  assert.strictEqual(stillOpen({ drawn: 0, ends_at: new Date(Date.now() + 3600000).toISOString() }), true);
+  assert.strictEqual(stillOpen({ drawn: 0, ends_at: null }), true);
+});
+
+const { missingChannelSlots, buildData } = require('../src/commands/config');
+check('config hides assigned channel setters', () => {
+  const empty = missingChannelSlots({});
+  assert.strictEqual(empty.length, 3);
+  const full = missingChannelSlots({
+    announce_channel: '1',
+    reminder_channel: '2',
+    audit_channel: '3',
+  });
+  assert.strictEqual(full.length, 0);
+  const json = buildData({
+    announce_channel: '1',
+    reminder_channel: '2',
+    audit_channel: '3',
+  }).toJSON();
+  const subs = (json.options || []).map(o => o.name);
+  assert(!subs.includes('announce-channel'));
+  assert(!subs.includes('reminder-channel'));
+  assert(!subs.includes('audit-channel'));
+  assert(subs.includes('view'));
+  assert(subs.includes('clear-channel'));
+});
+
+check('boss has week and end', () => {
+  const boss = loaded.find(c => c.json.name === 'boss');
+  const subs = (boss.json.options || []).map(o => o.name);
+  assert(subs.includes('week') && subs.includes('kc') && subs.includes('end'));
+});
+
+check('raffle create stays public, draw/end are staff replies', () => {
+  const raffle = loaded.find(c => c.file === 'raffle.js');
+  assert.deepStrictEqual(raffle.publicSubs, ['create']);
+});
+
+check('vote polls write duration_days', () => {
+  const voteSrc = fs.readFileSync(path.join(commandsDir, 'vote.js'), 'utf8');
+  assert(voteSrc.includes('duration_days'));
+  assert(!voteSrc.includes('sotw_duration,'));
 });
 
 const { joinDescription, make } = require('../src/services/cards');

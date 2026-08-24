@@ -1,5 +1,6 @@
 const { Events, ActivityType } = require('discord.js');
 const { startReminderPoller } = require('../services/reminders');
+const { registerCommands } = require('../deploy-commands');
 
 module.exports = {
   name: Events.ClientReady,
@@ -13,5 +14,8 @@ module.exports = {
     });
     startReminderPoller(client);
     console.log('⏰ Reminder poller started');
+    registerCommands(readyClient).catch(err => {
+      console.warn(`Slash command sync on ready: ${err.message}`);
+    });
   },
 };

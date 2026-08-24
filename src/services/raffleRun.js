@@ -59,20 +59,23 @@ async function pickWinner(raffle, entries) {
   };
 }
 
-async function postResult(client, raffle, { winner, entries, weightInfo, empty }) {
+async function postResult(client, raffle, { winner, entries, weightInfo, outcome }) {
   const theme = require('./theme');
   const prize = raffle.description && raffle.description !== 'Click the button below to enter!'
     ? raffle.description
     : null;
+  const closed = outcome === 'empty' || outcome === 'close';
   const made = await require('./cards').make('raffle', {
-    job: empty ? 'raffle_end' : 'raffle_win',
+    job: closed ? 'raffle_end' : 'raffle_win',
     facts: { title: raffle.title, prize, entries: entries.length, auto: true },
-    fallbackTitle: empty ? `${raffle.title} — closed` : `${raffle.title} — drawn`,
-    fallbackDescription: empty
-      ? 'Time is up. Nobody entered.'
-      : theme.line('raffleWon', raffle.id),
-    fields: empty
-      ? [theme.field('Entries', '0', true)]
+    fallbackTitle: closed ? `${raffle.title} — closed` : `${raffle.title} — drawn`,
+    fallbackDescription: outcome === 'close'
+      ? 'No winner. The Enter button is dead.'
+      : outcome === 'empty'
+        ? 'Time is up. Nobody entered.'
+        : theme.line('raffleWon', raffle.id),
+    fields: closed
+      ? [theme.field('Entries', String(entries.length), true)]
       : [
           theme.field('Winner', `<@${winner.user_id}>`, true),
           theme.field('Entries', String(entries.length), true),
@@ -111,19 +114,37 @@ async function postResult(client, raffle, { winner, entries, weightInfo, empty }
   return made;
 }
 
-async function settle(client, raffle) {
+async function markDrawn(raffleId, winnerId) {
+  const db = getDb();
+  return db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ? AND drawn = 0')
+    .run(winnerId, raffleId);
+}
+
+async function settle(client, raffle, { mode = 'draw' } = {}) {
   const db = getDb();
   if (Number(raffle.drawn)) return { skipped: true };
+
+  if (mode === 'close') {
+    const marked = await markDrawn(raffle.id, null);
+    if (!marked.changes) return { skipped: true };
+    const entries = await db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(raffle.id);
+    await postResult(client, raffle, { winner: null, entries, weightInfo: '', outcome: 'close' });
+    return { closed: true, entries };
+  }
+
   const entries = await db.prepare('SELECT * FROM raffle_entries WHERE raffle_id = ?').all(raffle.id);
   if (!entries.length) {
-    await db.prepare('UPDATE raffles SET drawn = 1, winner_id = NULL WHERE id = ? AND drawn = 0').run(raffle.id);
-    await postResult(client, raffle, { winner: null, entries, weightInfo: '', empty: true });
+    const marked = await markDrawn(raffle.id, null);
+    if (!marked.changes) return { skipped: true };
+    await postResult(client, raffle, { winner: null, entries, weightInfo: '', outcome: 'empty' });
     return { empty: true };
   }
+
   const { winner, weightInfo } = await pickWinner(raffle, entries);
-  await db.prepare('UPDATE raffles SET drawn = 1, winner_id = ? WHERE id = ? AND drawn = 0').run(winner.user_id, raffle.id);
+  const marked = await markDrawn(raffle.id, winner.user_id);
+  if (!marked.changes) return { skipped: true };
   await require('./economy').award(raffle.guild_id, winner.user_id, 'raffle_win', client);
-  const made = await postResult(client, raffle, { winner, entries, weightInfo, empty: false });
+  const made = await postResult(client, raffle, { winner, entries, weightInfo, outcome: 'win' });
   return { winner, entries, weightInfo, made };
 }
 

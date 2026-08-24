@@ -30,12 +30,25 @@ module.exports = {
       sub.setName('week')
         .setDescription('Start or show Boss of the Week (WOM KC, not /event)')
         .addStringOption(opt => opt.setName('boss').setDescription('Boss to start').addChoices(...BOSS_CHOICES))
-        .addIntegerOption(opt => opt.setName('days').setDescription('How many days the hunt lasts').setMinValue(1).setMaxValue(30))),
+        .addIntegerOption(opt => opt.setName('days').setDescription('How many days the hunt lasts').setMinValue(1).setMaxValue(30)))
+    .addSubcommand(sub =>
+      sub.setName('end')
+        .setDescription('End the live hunt now and pay first place')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
     const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+
+    if (sub === 'end') {
+      if (!isModerator(interaction.member)) {
+        return interaction.reply({ content: 'Mods end BOTW.', flags: 64 });
+      }
+      const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      if (!current) return interaction.reply({ content: 'No BOTW running.', flags: 64 });
+      await botw.finalizeBotw(interaction.client, current);
+      return interaction.reply({ content: `BOTW **${prettyMetric(current.boss)}** closed. Results posted in the hunt channel.`, flags: 64 });
+    }
 
     if (sub === 'week') {
       const boss = interaction.options.getString('boss');
@@ -89,10 +102,7 @@ module.exports = {
     }
 
     const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
-    let period = interaction.options.getString('period') || 'current';
-    if (period === 'botw' || (period === 'week' && current && current.boss === boss)) {
-      period = 'botw';
-    }
+    const period = interaction.options.getString('period') || 'current';
     await interaction.deferReply({ flags: 64 });
     try {
       if (period === 'botw') {
@@ -140,5 +150,5 @@ module.exports = {
     }
   },
   publicSubs: ['week'],
-  staffSubs: [],
+  staffSubs: ['end'],
 };

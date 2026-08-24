@@ -5,7 +5,7 @@ const economy = require('../services/economy');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('economy')
-    .setDescription('Guild credits from masses, bingo, SOTW, and flags')
+    .setDescription('Guild credits from masses, bingo, SOTW, BOTW, and flags')
     .addSubcommand(sub =>
       sub.setName('balance')
         .setDescription('Check guild credit balance')
@@ -24,7 +24,7 @@ module.exports = {
           title: 'Guild credits',
           description: [
             `${user} is sitting on **${coins.toLocaleString()}** guild credits.`,
-            economy.payRates('event_rsvp', 'raffle_enter', 'raffle_win', 'sotw_win', 'bingo_tile', 'achievement', 'goal'),
+            economy.payRates('event_rsvp', 'raffle_enter', 'raffle_win', 'sotw_win', 'botw_win', 'bingo_tile', 'achievement', 'goal'),
           ].join('\n\n'),
         })],
         flags: 64,

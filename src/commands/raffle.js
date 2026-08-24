@@ -17,7 +17,7 @@ module.exports = {
   ticketLine,
   data: new SlashCommandBuilder()
     .setName('raffle')
-    .setDescription('Manage clan raffles')
+    .setDescription('Clan raffles — set hours (or until), then I draw')
     .addSubcommand(sub =>
       sub.setName('create')
         .setDescription('Create a new raffle with a button for entries')
@@ -186,6 +186,9 @@ module.exports = {
       }
 
       const settled = await require('../services/raffleRun').settle(interaction.client, raffle);
+      if (settled.skipped) {
+        return interaction.reply({ content: `Raffle #${id} was already drawn.`, flags: 64 });
+      }
       if (settled.empty) {
         return interaction.reply({ content: `Raffle #${id} had no entries. Closed with no winner.`, flags: 64 });
       }
@@ -214,34 +217,11 @@ module.exports = {
         });
       }
 
-      const count = await db.prepare('SELECT COUNT(*) as count FROM raffle_entries WHERE raffle_id = ?').get(id);
-      await db.prepare('UPDATE raffles SET drawn = 1, winner_id = NULL WHERE id = ?').run(id);
-
-      const theme = require('../services/theme');
-      const made = await require('../services/cards').make('raffle', {
-        job: 'raffle_end',
-        facts: { title: raffle.title },
-        fallbackTitle: `${raffle.title} — closed`,
-        fallbackDescription: 'No winner. The Enter button is dead.',
-        fields: [
-          theme.field('Entries', String(count?.count || 0), true),
-          raffle.description && raffle.description !== 'Click the button below to enter!'
-            ? theme.field('Prize', raffle.description)
-            : null,
-        ],
-        footer: `Raffle #${id}  ·  Misclickers`,
-        timestamp: true,
-      });
-      const closed = await interaction.reply({
-        embeds: [made.embed],
-        fetchReply: true,
-      });
-      await require('../services/cards').publish(interaction.client, interaction.guildId, {
-        kind: 'raffle',
-        json: made.json,
-        sourceChannelId: closed.channelId,
-        sourceMessageId: closed.id,
-      });
+      const settled = await require('../services/raffleRun').settle(interaction.client, raffle, { mode: 'close' });
+      if (settled.skipped) {
+        return interaction.reply({ content: `Raffle #${id} is already closed.`, flags: 64 });
+      }
+      await interaction.reply({ content: `Raffle #${id} **${raffle.title}** closed with no winner.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** ended by <@${interaction.user.id}> (no winner)`);
       return;
     }
@@ -310,7 +290,7 @@ module.exports = {
     }
   },
   staffSubs: ['create', 'draw', 'end'],
-  publicSubs: ['create', 'draw', 'end'],
+  publicSubs: ['create'],
 
   async autocomplete(interaction) {
     const { getDb } = require('../db/database');

@@ -178,7 +178,7 @@ module.exports = {
           alreadyReminded ? 'Posted quietly — this event was already reminded.' : 'If you’re coming, be logged in.',
         ],
         fields: [
-          theme.field('Guild credits', economy.payNote(event.category === 'sotw' ? 'sotw_win' : 'event_rsvp')),
+          theme.field('Guild credits', economy.payNote('event_rsvp')),
         ],
       });
       await interaction.reply({

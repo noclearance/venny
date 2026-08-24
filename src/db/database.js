@@ -209,8 +209,9 @@ async function initDb() {
       message_id    TEXT,
       options_json  TEXT NOT NULL,  -- JSON array of option texts
       ends_at       TEXT NOT NULL,
-      auto_start    INTEGER DEFAULT 0,  -- 1 = auto-start SOTW with winning skill
-      sotw_duration INTEGER DEFAULT 7,  -- duration in days for auto-started SOTW
+      auto_start    INTEGER DEFAULT 0,  -- 1 = auto-start SOTW/BOTW with the winner
+      sotw_duration INTEGER DEFAULT 7,
+      duration_days INTEGER DEFAULT 7,
       finalized     INTEGER DEFAULT 0,
       winner        TEXT,
       created_by    TEXT NOT NULL,
@@ -464,6 +465,8 @@ async function initDb() {
   await migrateColumn(db, 'bingo_tiles', 'points', 'INTEGER DEFAULT 1');
   await migrateColumn(db, 'raffles', 'ticket_gp', 'INTEGER DEFAULT 150000');
   await migrateColumn(db, 'raffles', 'ends_at', 'TEXT');
+  await migrateColumn(db, 'polls', 'duration_days', 'INTEGER');
+  await db.exec('UPDATE polls SET duration_days = sotw_duration WHERE duration_days IS NULL');
 
   return db;
 }

@@ -61,9 +61,7 @@ async function tick(client) {
           theme.when(event.event_time),
           started ? 'It’s up. Get in.' : 'Fifteen minutes. If you’re coming, be logged in.',
         ],
-        fields: event.category === 'sotw'
-          ? [theme.field('Guild credits', economy.payNote('sotw_win'))]
-          : [theme.field('Guild credits', economy.payNote('event_rsvp'))],
+        fields: [theme.field('Guild credits', economy.payNote('event_rsvp'))],
       });
       await channel.send({
         content: mentionStr || undefined,
@@ -249,6 +247,80 @@ async function finalizeSotw(client, sotw) {
   }
 }
 
+function pollDays(poll) {
+  return Number(poll.duration_days || poll.sotw_duration || 7);
+}
+
+async function autoStartFromPoll(client, channel, poll, winner, results) {
+  if (!poll.auto_start) return false;
+  const days = pollDays(poll);
+  const cards = require('./cards');
+  const theme = require('./theme');
+
+  if (poll.type === 'sotw') {
+    const skillMatch = winner.replace(/^[^\s]+\s/, '').toLowerCase().trim();
+    const { startSotw } = require('./sotw');
+    const sotwResult = await startSotw({
+      guildId: poll.guild_id,
+      channelId: poll.channel_id,
+      createdBy: poll.created_by,
+      skill: skillMatch,
+      durationDays: days,
+      title: `SOTW: ${skillMatch.toUpperCase()} (Voted)`,
+    });
+    if (!sotwResult.success) {
+      await channel.send(`${results}\n\nFailed to auto-start SOTW: ${sotwResult.error}`);
+      return true;
+    }
+    const posted = await channel.send(sotwResult.embed
+      ? { content: `${results}\n\n**${winner}** won. Week is live.`, embeds: [sotwResult.embed] }
+      : { content: `${results}\n\n${sotwResult.response}` });
+    if (sotwResult.card) {
+      await cards.publish(client, poll.guild_id, {
+        kind: 'sotw',
+        json: sotwResult.card,
+        extraLines: sotwResult.tracking ? [sotwResult.tracking] : [],
+        fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
+        sourceChannelId: posted.channelId,
+        sourceMessageId: posted.id,
+      });
+    }
+    return true;
+  }
+
+  if (poll.type === 'botw') {
+    const { startBotw, metricFromLabel } = require('./botw');
+    const boss = metricFromLabel(winner);
+    const botwResult = await startBotw({
+      guildId: poll.guild_id,
+      channelId: poll.channel_id,
+      createdBy: poll.created_by,
+      boss: boss || winner,
+      durationDays: days,
+    });
+    if (!botwResult.success) {
+      await channel.send(`${results}\n\nFailed to auto-start BOTW: ${botwResult.error}`);
+      return true;
+    }
+    const posted = await channel.send({
+      content: `${results}\n\n**${winner}** won. Hunt is live.`,
+      embeds: [botwResult.embed],
+    });
+    if (botwResult.card) {
+      await cards.publish(client, poll.guild_id, {
+        kind: 'danger',
+        json: botwResult.card,
+        fields: [theme.field('Guild credits', require('./economy').payNote('botw_win'))],
+        sourceChannelId: posted.channelId,
+        sourceMessageId: posted.id,
+      });
+    }
+    return true;
+  }
+
+  return false;
+}
+
 function isMissingDiscordResource(err) {
   const code = err.code || err.status;
   if (code === 10008 || code === 10003 || code === 50001) return true;
@@ -297,47 +369,8 @@ async function finalizePoll(client, poll) {
       results += `\n⚠️ Tie detected between ${tied.length} options. Using the first one: **${winner}**`;
     }
 
-    if (poll.type === 'sotw' && poll.auto_start) {
-      const skillMatch = winner.replace(/^[^\s]+\s/, '').toLowerCase().trim();
-      const { startSotw } = require('./sotw');
-      const sotwResult = await startSotw({
-        guildId: poll.guild_id,
-        channelId: poll.channel_id,
-        createdBy: poll.created_by,
-        skill: skillMatch,
-        durationDays: poll.sotw_duration || 7,
-        title: `SOTW: ${skillMatch.toUpperCase()} (Voted)`,
-      });
-
-      if (sotwResult.success) {
-        await channel.send(sotwResult.embed
-          ? { content: `${results}\n\n**${winner}** won. Week is live.`, embeds: [sotwResult.embed] }
-          : { content: `${results}\n\n${sotwResult.response}` });
-        return;
-      }
-      results += `\n\nFailed to auto-start SOTW: ${sotwResult.error}`;
-    }
-
-    if (poll.type === 'botw' && poll.auto_start) {
-      const { startBotw, metricFromLabel } = require('./botw');
-      const boss = metricFromLabel(winner);
-      const botwResult = await startBotw({
-        guildId: poll.guild_id,
-        channelId: poll.channel_id,
-        createdBy: poll.created_by,
-        boss: boss || winner,
-        durationDays: poll.sotw_duration || 7,
-      });
-      if (botwResult.success) {
-        await channel.send({
-          content: `${results}\n\n**${winner}** won. Hunt is live.`,
-          embeds: [botwResult.embed],
-        });
-        return;
-      }
-      results += `\n\nFailed to auto-start BOTW: ${botwResult.error}`;
-    }
-
+    const started = await autoStartFromPoll(client, channel, poll, winner, results);
+    if (started) return;
     await channel.send(results);
   } catch (err) {
     if (isMissingDiscordResource(err)) {

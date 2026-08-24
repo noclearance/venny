@@ -11,7 +11,7 @@ module.exports = {
     .setDescription('Clan dashboard and info')
     .addSubcommand(sub =>
       sub.setName('info')
-      .setDescription('Show a dashboard of active SOTW, events, raffles, polls, and member count'))
+      .setDescription('Show a dashboard of SOTW, BOTW, events, raffles, and polls'))
     .addSubcommand(sub =>
       sub.setName('sync')
         .setDescription('Sync clan members from Wise Old Man (admin only)')),
@@ -29,6 +29,7 @@ module.exports = {
       // Gather stats
       const memberCount = await db.prepare('SELECT COUNT(*) as count FROM members WHERE guild_id = ?').get(interaction.guildId).count;
       const activeSotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      const activeBotw = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       const { MASS } = require('../services/calendar');
       const upcomingEvents = await db.prepare(`SELECT * FROM events WHERE guild_id = ? AND event_time > ? AND ${MASS} ORDER BY event_time ASC LIMIT 5`).all(interaction.guildId, now);
       const activeRaffles = await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').all(interaction.guildId);
@@ -65,8 +66,15 @@ module.exports = {
         : theme.EMPTY.polls;
 
       const queue = await sotwQueue.getQueue(interaction.guildId);
+      const { prettyMetric } = require('../osrs/catalog');
+      let botwValue = 'No hunt running.';
+      if (activeBotw) {
+        botwValue = `**${prettyMetric(activeBotw.boss)}**\nEnds ${theme.when(activeBotw.ends_at)}`;
+      }
+
       const fields = [
         theme.field('🏆 Skill of the Week', sotwValue, true),
+        theme.field('⚔️ Boss of the Week', botwValue, true),
         theme.field(`📅 Events · ${upcomingEvents.length}`, eventValue, true),
         theme.field(`🎟️ Raffles · ${activeRaffles.length}`, raffleValue, true),
         theme.field(`🗳️ Polls · ${activePolls.length}`, pollValue, true),
@@ -84,7 +92,7 @@ module.exports = {
       if (bingoCard) {
         fields.push(theme.field('Bingo', `**${bingoCard.title}** · ${bingoCard.status} · \`/bingo board\``));
       }
-      const busy = Boolean(activeSotw || upcomingEvents.length || activeRaffles.length || bingoCard);
+      const busy = Boolean(activeSotw || activeBotw || upcomingEvents.length || activeRaffles.length || bingoCard);
       const embed = theme.embed('brand', {
         title: 'Clan dashboard',
         description: theme.line(busy ? 'dashboardBusy' : 'dashboardQuiet', `${memberCount}-${sotwWinCount}`),
