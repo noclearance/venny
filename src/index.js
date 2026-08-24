@@ -5,7 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const { initDb } = require('./db/database');
 const { ensureGuildSettings } = require('./services/guild');
-const { registerCommands } = require('./deploy-commands');
 const { startServer } = require('./services/webhooks');
 const { watchDiscord } = require('./services/discordWatch');
 
@@ -75,11 +74,6 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 
   watchDiscord(client);
   startServer(client);
-
-  registerCommands().catch(err => {
-    console.error('Failed to register slash commands on startup:', err.message);
-    console.error('The bot will still start. Run `npm run register` after fixing CLIENT_ID / DISCORD_TOKEN.');
-  });
 
   console.log('Connecting to Discord...');
   client.login(process.env.DISCORD_TOKEN).catch(err => {

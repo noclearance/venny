@@ -135,7 +135,12 @@ module.exports = {
     const channelSlot = CHANNEL_SLOTS.find(slot => slot.sub === sub);
     if (channelSlot) {
       const channel = interaction.options.getChannel('channel');
-      await db.prepare(`UPDATE guild_settings SET ${channelSlot.key} = ? WHERE guild_id = ?`).run(channel.id, interaction.guildId);
+      const setSql = {
+        announce_channel: 'UPDATE guild_settings SET announce_channel = ? WHERE guild_id = ?',
+        reminder_channel: 'UPDATE guild_settings SET reminder_channel = ? WHERE guild_id = ?',
+        audit_channel: 'UPDATE guild_settings SET audit_channel = ? WHERE guild_id = ?',
+      }[channelSlot.key];
+      await db.prepare(setSql).run(channel.id, interaction.guildId);
       await interaction.reply({
         content: `${channelSlot.setCopy} ${channel}. That setup command drops out of the slash menu now. \`/config view\` still works. \`/config clear-channel\` brings it back.`,
         flags: 64,
@@ -151,7 +156,12 @@ module.exports = {
       if (!slot) {
         return interaction.reply({ content: 'Unknown channel slot.', flags: 64 });
       }
-      await db.prepare(`UPDATE guild_settings SET ${slot.key} = NULL WHERE guild_id = ?`).run(interaction.guildId);
+      const clearSql = {
+        announce_channel: 'UPDATE guild_settings SET announce_channel = NULL WHERE guild_id = ?',
+        reminder_channel: 'UPDATE guild_settings SET reminder_channel = NULL WHERE guild_id = ?',
+        audit_channel: 'UPDATE guild_settings SET audit_channel = NULL WHERE guild_id = ?',
+      }[slot.key];
+      await db.prepare(clearSql).run(interaction.guildId);
       await interaction.reply({
         content: `${slot.auditCopy} unassigned. \`/config ${slot.sub}\` is back in the slash menu.`,
         flags: 64,

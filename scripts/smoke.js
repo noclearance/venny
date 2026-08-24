@@ -131,10 +131,16 @@ check('raffle create stays public, draw/end are staff replies', () => {
   assert.deepStrictEqual(raffle.publicSubs, ['create']);
 });
 
-check('vote polls write duration_days', () => {
+check('vote polls write sotw_duration', () => {
   const voteSrc = fs.readFileSync(path.join(commandsDir, 'vote.js'), 'utf8');
-  assert(voteSrc.includes('duration_days'));
-  assert(!voteSrc.includes('sotw_duration,'));
+  assert(voteSrc.includes('sotw_duration,'));
+});
+
+check('sotw start uses one WOM attach path', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'sotw.js'), 'utf8');
+  assert(src.includes('async function ensureWomWeek'));
+  assert(!src.includes('async function resolveWomId'));
+  assert(!src.includes('linkWomIfMissing'));
 });
 
 const { joinDescription, make } = require('../src/services/cards');

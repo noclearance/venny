@@ -378,7 +378,7 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
   });
 
   const result = await db.prepare(`
-    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, duration_days, created_by)
+    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
     VALUES (?, 'botw', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     interaction.guildId,
@@ -456,7 +456,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
   });
 
   const result = await db.prepare(`
-    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, duration_days, created_by)
+    INSERT INTO polls (guild_id, type, question, channel_id, message_id, options_json, ends_at, auto_start, sotw_duration, created_by)
     VALUES (?, 'sotw', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     interaction.guildId,

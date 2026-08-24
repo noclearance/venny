@@ -156,7 +156,9 @@ async function tick(client) {
       await require('./botw').finalizeBotw(client, row);
     } catch (err) {
       console.error(`Failed to finalize BOTW ${row.id}:`, err.message);
-      await db.prepare('UPDATE botw SET ended = 1 WHERE id = ?').run(row.id);
+      if (isMissingDiscordResource(err)) {
+        await db.prepare('UPDATE botw SET ended = 1 WHERE id = ?').run(row.id);
+      }
     }
   }
 
@@ -251,16 +253,35 @@ function pollDays(poll) {
   return Number(poll.duration_days || poll.sotw_duration || 7);
 }
 
+async function publishAutoStart(client, channel, poll, winner, results, { label, liveLine, kind, pay, started, extraLines = [] }) {
+  if (!started.success) {
+    await channel.send(`${results}\n\nFailed to auto-start ${label}: ${started.error}`);
+    return true;
+  }
+  const posted = await channel.send(started.embed
+    ? { content: `${results}\n\n**${winner}** won. ${liveLine}`, embeds: [started.embed] }
+    : { content: `${results}\n\n${started.response}` });
+  if (started.card) {
+    const theme = require('./theme');
+    await require('./cards').publish(client, poll.guild_id, {
+      kind,
+      json: started.card,
+      extraLines,
+      fields: [theme.field('Guild credits', require('./economy').payNote(pay))],
+      sourceChannelId: posted.channelId,
+      sourceMessageId: posted.id,
+    });
+  }
+  return true;
+}
+
 async function autoStartFromPoll(client, channel, poll, winner, results) {
   if (!poll.auto_start) return false;
   const days = pollDays(poll);
-  const cards = require('./cards');
-  const theme = require('./theme');
 
   if (poll.type === 'sotw') {
     const skillMatch = winner.replace(/^[^\s]+\s/, '').toLowerCase().trim();
-    const { startSotw } = require('./sotw');
-    const sotwResult = await startSotw({
+    const started = await require('./sotw').startSotw({
       guildId: poll.guild_id,
       channelId: poll.channel_id,
       createdBy: poll.created_by,
@@ -268,54 +289,32 @@ async function autoStartFromPoll(client, channel, poll, winner, results) {
       durationDays: days,
       title: `SOTW: ${skillMatch.toUpperCase()} (Voted)`,
     });
-    if (!sotwResult.success) {
-      await channel.send(`${results}\n\nFailed to auto-start SOTW: ${sotwResult.error}`);
-      return true;
-    }
-    const posted = await channel.send(sotwResult.embed
-      ? { content: `${results}\n\n**${winner}** won. Week is live.`, embeds: [sotwResult.embed] }
-      : { content: `${results}\n\n${sotwResult.response}` });
-    if (sotwResult.card) {
-      await cards.publish(client, poll.guild_id, {
-        kind: 'sotw',
-        json: sotwResult.card,
-        extraLines: sotwResult.tracking ? [sotwResult.tracking] : [],
-        fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
-        sourceChannelId: posted.channelId,
-        sourceMessageId: posted.id,
-      });
-    }
-    return true;
+    return publishAutoStart(client, channel, poll, winner, results, {
+      label: 'SOTW',
+      liveLine: 'Week is live.',
+      kind: 'sotw',
+      pay: 'sotw_win',
+      started,
+      extraLines: started.tracking ? [started.tracking] : [],
+    });
   }
 
   if (poll.type === 'botw') {
     const { startBotw, metricFromLabel } = require('./botw');
-    const boss = metricFromLabel(winner);
-    const botwResult = await startBotw({
+    const started = await startBotw({
       guildId: poll.guild_id,
       channelId: poll.channel_id,
       createdBy: poll.created_by,
-      boss: boss || winner,
+      boss: metricFromLabel(winner) || winner,
       durationDays: days,
     });
-    if (!botwResult.success) {
-      await channel.send(`${results}\n\nFailed to auto-start BOTW: ${botwResult.error}`);
-      return true;
-    }
-    const posted = await channel.send({
-      content: `${results}\n\n**${winner}** won. Hunt is live.`,
-      embeds: [botwResult.embed],
+    return publishAutoStart(client, channel, poll, winner, results, {
+      label: 'BOTW',
+      liveLine: 'Hunt is live.',
+      kind: 'danger',
+      pay: 'botw_win',
+      started,
     });
-    if (botwResult.card) {
-      await cards.publish(client, poll.guild_id, {
-        kind: 'danger',
-        json: botwResult.card,
-        fields: [theme.field('Guild credits', require('./economy').payNote('botw_win'))],
-        sourceChannelId: posted.channelId,
-        sourceMessageId: posted.id,
-      });
-    }
-    return true;
   }
 
   return false;

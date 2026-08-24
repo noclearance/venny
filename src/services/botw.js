@@ -102,8 +102,6 @@ async function kcBoard(settings, botw) {
 async function finalizeBotw(client, botw) {
   const db = getDb();
   if (Number(botw.ended)) return;
-  const claimed = await db.prepare('UPDATE botw SET ended = 1 WHERE id = ? AND ended = 0').run(botw.id);
-  if (!claimed.changes) return;
   const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(botw.guild_id);
   let rows = [];
   try {
@@ -124,20 +122,18 @@ async function finalizeBotw(client, botw) {
     thumbnail: theme.skillIconUrl('slayer'),
   });
 
-  try {
-    const channel = await client.channels.fetch(botw.channel_id);
-    const posted = await channel.send({ embeds: [made.embed] });
-    await require('./cards').publish(client, botw.guild_id, {
-      kind: 'danger',
-      json: made.json,
-      fields: [theme.field('Guild credits', require('./economy').payNote('botw_win'))],
-      sourceChannelId: posted.channelId,
-      sourceMessageId: posted.id,
-    });
-  } catch (err) {
-    console.warn(`BOTW #${botw.id} results post: ${err.message}`);
-  }
+  const channel = await client.channels.fetch(botw.channel_id);
+  const posted = await channel.send({ embeds: [made.embed] });
+  await require('./cards').publish(client, botw.guild_id, {
+    kind: 'danger',
+    json: made.json,
+    fields: [theme.field('Guild credits', require('./economy').payNote('botw_win'))],
+    sourceChannelId: posted.channelId,
+    sourceMessageId: posted.id,
+  });
 
+  const claimed = await db.prepare('UPDATE botw SET ended = 1 WHERE id = ? AND ended = 0').run(botw.id);
+  if (!claimed.changes) return;
   if (winnerRsn) {
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(botw.guild_id, winnerRsn);
     if (winner) await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client);

@@ -72,7 +72,7 @@ async function createCompetition(sotw, settings, title) {
   return { sotw: { ...sotw, wom_competition_id: id }, linked: true, created: true };
 }
 
-async function ensureWomWeek(sotw) {
+async function ensureWomWeek(sotw, { title } = {}) {
   if (!sotw || sotw.wom_competition_id) return { sotw, linked: false, created: false };
   const db = getDb();
   const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(sotw.guild_id);
@@ -97,134 +97,85 @@ async function ensureWomWeek(sotw) {
   }
 
   try {
-    return await createCompetition(sotw, settings);
+    return await createCompetition(sotw, settings, title);
   } catch (err) {
     console.error('Failed to link WOM competition:', err.message);
     return { sotw, linked: false, created: false, error: err.message };
   }
 }
 
-async function resolveWomId({ settings, skill, title, startsAt, endsAt }) {
-  let womCompetitionId = null;
-  let womError = null;
-  let adopted = false;
-  let liveEndsAt = null;
-  let liveStartsAt = null;
-
-  if (!settings?.wom_group_id) {
-    return { womCompetitionId, womError, adopted, liveStartsAt, liveEndsAt };
+function trackingLine(sotw, linked) {
+  const id = sotw?.wom_competition_id;
+  if (id) {
+    const how = linked.adopted ? 'Attached the live' : 'Tracked on';
+    return `${how} [Wise Old Man](https://wiseoldman.net/competitions/${id}) week.\nUse \`/sotw standings\` or \`/sotw me\`.`;
   }
-
-  try {
-    const live = await findLiveCompetition(settings.wom_group_id, skill);
-    const id = competitionId(live);
-    if (id) {
-      return {
-        womCompetitionId: id,
-        womError: null,
-        adopted: true,
-        liveStartsAt: live.startsAt || live.starts_at || null,
-        liveEndsAt: live.endsAt || live.ends_at || null,
-      };
-    }
-  } catch (err) {
-    console.warn(`WOM list competitions: ${err.message}`);
-  }
-
-  if (!settings.wom_verif_code) {
-    return {
-      womCompetitionId: null,
-      womError: 'Not linked to WOM yet. Set group + verification with `/config`.',
-      adopted,
-      liveStartsAt,
-      liveEndsAt,
-    };
-  }
-
-  try {
-    const comp = await wom.createCompetition({
-      title: String(title || `SOTW ${String(skill || '').toUpperCase()}`).trim().slice(0, 50),
-      metric: skill,
-      startsAt,
-      endsAt,
-      groupId: settings.wom_group_id,
-      groupVerificationCode: settings.wom_verif_code,
-    });
-    womCompetitionId = competitionId(comp);
-    if (!womCompetitionId) womError = 'WOM did not return a competition id.';
-    else console.log(`Created WOM competition ${womCompetitionId}: ${title || skill}`);
-  } catch (err) {
-    womError = err.message;
-    console.error('Failed to create WOM competition:', err.message);
-  }
-
-  return { womCompetitionId, womError, adopted, liveStartsAt, liveEndsAt };
+  if (linked.error) return `WOM was not created: ${linked.error}\nLocal SOTW is still running.`;
+  return 'Not linked to WOM yet. Set group + verification with `/config`.';
 }
 
 async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 7, title = null }) {
   const db = getDb();
-  const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(guildId);
-
   const active = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
   if (active) {
     return { success: false, error: `There's already an active SOTW (#${active.id}: ${active.skill}). End it first.` };
   }
 
   const finalTitle = String(title || `SOTW ${String(skill || '').toUpperCase()}`).trim().slice(0, 50);
-  let startsAt = new Date().toISOString();
-  let endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const resolved = await resolveWomId({ settings, skill, title: finalTitle, startsAt, endsAt });
-  const womCompetitionId = resolved.womCompetitionId;
-  const womError = resolved.womError;
-  if (resolved.adopted) {
-    if (resolved.liveStartsAt) startsAt = resolved.liveStartsAt;
-    if (resolved.liveEndsAt) endsAt = resolved.liveEndsAt;
-  }
+  const startsAt = new Date().toISOString();
+  const endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
   const result = await db.prepare(`
     INSERT INTO sotw (guild_id, skill, starts_at, ends_at, wom_competition_id, channel_id, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(guildId, skill, startsAt, endsAt, womCompetitionId, channelId, createdBy);
+  `).run(guildId, skill, startsAt, endsAt, null, channelId, createdBy);
 
-  const endTs = Math.floor(new Date(endsAt).getTime() / 1000);
+  const inserted = {
+    id: result.lastInsertRowid,
+    guild_id: guildId,
+    skill,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    wom_competition_id: null,
+    channel_id: channelId,
+    created_by: createdBy,
+  };
+  const linked = await ensureWomWeek(inserted, { title: finalTitle });
+  const sotw = linked.sotw;
+  const tracking = trackingLine(sotw, linked);
+
+  const endTs = Math.floor(new Date(sotw.ends_at).getTime() / 1000);
   const theme = require('./theme');
-
-  let tracking = 'Use `/sotw standings` once WOM is linked.';
-  if (womCompetitionId) {
-    tracking = resolved.adopted
-      ? `Attached the live [Wise Old Man](https://wiseoldman.net/competitions/${womCompetitionId}) week.\nUse \`/sotw standings\` or \`/sotw me\`.`
-      : `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${womCompetitionId})\nUse \`/sotw standings\` or \`/sotw me\`.`;
-  } else if (womError) {
-    tracking = `WOM was not created: ${womError}\nLocal SOTW is still running.`;
-  } else {
-    tracking = 'Not linked to WOM yet. Set group + verification with `/config`.';
-  }
-
   const economy = require('./economy');
-  const windowDays = Math.max(1, Math.round((new Date(endsAt) - new Date(startsAt)) / 86400000)) || durationDays;
+  const windowDays = Math.max(1, Math.round((new Date(sotw.ends_at) - new Date(sotw.starts_at)) / 86400000)) || durationDays;
   const made = await require('./cards').make('sotw', {
     job: 'sotw_start',
-    facts: { skill, days: windowDays, wom: Boolean(womCompetitionId) },
+    facts: { skill: sotw.skill, days: windowDays, wom: Boolean(sotw.wom_competition_id) },
     extraLines: [tracking],
-    thumbnail: theme.skillIconUrl(skill),
-    url: womCompetitionId ? `https://wiseoldman.net/competitions/${womCompetitionId}` : undefined,
+    thumbnail: theme.skillIconUrl(sotw.skill),
+    url: sotw.wom_competition_id ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}` : undefined,
     fields: [
       theme.field('Ends', `<t:${endTs}:R>`, true),
-      theme.field('ID', `#${result.lastInsertRowid}`, true),
+      theme.field('ID', `#${sotw.id}`, true),
       theme.field('Guild credits', economy.payNote('sotw_win')),
     ],
   });
-  const embed = made.embed;
-  const card = made.json;
 
   const response = [
-    `🏆 **SOTW started** — **${skill.toUpperCase()}**`,
-    `Ends <t:${endTs}:R> · ID #${result.lastInsertRowid}`,
+    `🏆 **SOTW started** — **${String(sotw.skill).toUpperCase()}**`,
+    `Ends <t:${endTs}:R> · ID #${sotw.id}`,
     tracking,
   ].join('\n');
 
-  return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card, tracking };
+  return {
+    success: true,
+    response,
+    embed: made.embed,
+    sotwId: sotw.id,
+    womCompetitionId: sotw.wom_competition_id,
+    card: made.json,
+    tracking,
+  };
 }
 
 async function adoptLiveFromWom({ guildId, channelId, createdBy }) {
@@ -271,7 +222,6 @@ function statusOf(sotw) {
 module.exports = {
   startSotw,
   ensureWomWeek,
-  linkWomIfMissing: ensureWomWeek,
   adoptLiveFromWom,
   statusOf,
   findLiveCompetition,
