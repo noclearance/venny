@@ -29,7 +29,8 @@ module.exports = {
       // Gather stats
       const memberCount = await db.prepare('SELECT COUNT(*) as count FROM members WHERE guild_id = ?').get(interaction.guildId).count;
       const activeSotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
-      const upcomingEvents = await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC LIMIT 5').all(interaction.guildId, now);
+      const { MASS } = require('../services/calendar');
+      const upcomingEvents = await db.prepare(`SELECT * FROM events WHERE guild_id = ? AND event_time > ? AND ${MASS} ORDER BY event_time ASC LIMIT 5`).all(interaction.guildId, now);
       const activeRaffles = await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').all(interaction.guildId);
       const activePolls = await db.prepare('SELECT * FROM polls WHERE guild_id = ? AND finalized = 0 ORDER BY id DESC').all(interaction.guildId);
       const sotwWinCount = await db.prepare('SELECT COUNT(*) as count FROM sotw_winners WHERE guild_id = ?').get(interaction.guildId).count;

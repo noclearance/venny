@@ -17,7 +17,7 @@ async function snapshot(guildId) {
   const now = new Date().toISOString();
   return {
     sotw: await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(guildId),
-    event: await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(guildId, now),
+    event: await db.prepare(`SELECT * FROM events WHERE guild_id = ? AND event_time > ? AND ${require('./calendar').MASS} ORDER BY event_time ASC`).get(guildId, now),
     raffle: await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(guildId),
     queue: await sotwQueue.getQueue(guildId),
     bingo: await require('./bingo').activeBingo(guildId),

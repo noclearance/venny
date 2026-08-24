@@ -81,22 +81,6 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     tracking,
   ].join('\n');
 
-  try {
-    await db.prepare(`
-      INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category)
-      VALUES (?, ?, ?, ?, ?, ?, 'none', 'sotw')
-    `).run(
-      guildId,
-      `SOTW · ${skill}`,
-      `${theme.line('sotwEvent', skill)}\nTracked until the deadline.${womCompetitionId ? ` https://wiseoldman.net/competitions/${womCompetitionId}` : ''}`,
-      endsAt,
-      channelId,
-      createdBy
-    );
-  } catch (err) {
-    console.error('SOTW calendar event failed:', err.message);
-  }
-
   return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card, tracking };
 }
 

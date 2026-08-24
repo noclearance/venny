@@ -10,10 +10,10 @@ const { audit } = require('../services/audit');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('sotw')
-    .setDescription('Skill of the Week — manage clan skill competitions via Wise Old Man')
+    .setDescription('Wise Old Man Skill of the Week — not a calendar mass')
     .addSubcommand(sub =>
       sub.setName('start')
-        .setDescription('Start a new SOTW competition')
+        .setDescription('Open a WOM competition for a skill this week')
         .addStringOption(opt =>
           opt.setName('skill')
             .setDescription('Which skill to compete in')
@@ -38,7 +38,7 @@ module.exports = {
             .setRequired(false)))
     .addSubcommand(sub =>
       sub.setName('current')
-        .setDescription('Show the current active SOTW'))
+        .setDescription('Is this week on Discord only, or on Wise Old Man too?'))
     .addSubcommand(sub =>
       sub.setName('end')
         .setDescription('End the current SOTW early and show results')

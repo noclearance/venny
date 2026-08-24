@@ -57,8 +57,9 @@ async function getPaginatedData(type, guildId, page) {
 
   if (type === 'events') {
     const now = new Date().toISOString();
-    const total = (await db.prepare('SELECT COUNT(*) as count FROM events WHERE guild_id = ? AND event_time > ?').get(guildId, now)).count;
-    const items = await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC LIMIT ? OFFSET ?').all(guildId, now, ITEMS_PER_PAGE, offset);
+    const { MASS } = require('./calendar');
+    const total = (await db.prepare(`SELECT COUNT(*) as count FROM events WHERE guild_id = ? AND event_time > ? AND ${MASS}`).get(guildId, now)).count;
+    const items = await db.prepare(`SELECT * FROM events WHERE guild_id = ? AND event_time > ? AND ${MASS} ORDER BY event_time ASC LIMIT ? OFFSET ?`).all(guildId, now, ITEMS_PER_PAGE, offset);
     const counts = await attendanceCounts(db, items.map(e => e.id));
     return {
       totalPages: Math.max(1, Math.ceil(total / ITEMS_PER_PAGE)),
@@ -68,7 +69,8 @@ async function getPaginatedData(type, guildId, page) {
         const ts = Math.floor(new Date(e.event_time).getTime() / 1000);
         const rsvp = counts.get(e.id) || { yes: 0, maybe: 0, no: 0 };
         const recur = e.recurrence && e.recurrence !== 'none' ? ` · repeats ${e.recurrence}` : '';
-        return `**#${e.id}** — ${e.title}\n<t:${ts}:F> · <t:${ts}:R>\n${rsvp.yes} going · ${rsvp.maybe} maybe · ${rsvp.no} out${recur}`;
+        const cat = e.category && e.category !== 'general' ? ` · ${e.category}` : '';
+        return `**#${e.id}** — ${e.title}${cat}\n<t:${ts}:F> · <t:${ts}:R>\n${rsvp.yes} going · ${rsvp.maybe} maybe · ${rsvp.no} out${recur}`;
       }).join('\n\n'),
       title: 'Upcoming Events',
     };

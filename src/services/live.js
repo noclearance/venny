@@ -77,7 +77,7 @@ async function refreshDashboard(client, row) {
   const db = getDb();
   const now = new Date().toISOString();
   const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(row.guild_id);
-  const event = await db.prepare('SELECT * FROM events WHERE guild_id = ? AND event_time > ? ORDER BY event_time ASC').get(row.guild_id, now);
+  const event = await db.prepare(`SELECT * FROM events WHERE guild_id = ? AND event_time > ? AND ${require('./calendar').MASS} ORDER BY event_time ASC`).get(row.guild_id, now);
   const raffle = await db.prepare('SELECT * FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC').get(row.guild_id);
   const card = await bingo.activeBingo(row.guild_id);
   await message.edit({

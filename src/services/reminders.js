@@ -38,6 +38,11 @@ async function tick(client) {
         continue;
       }
 
+      if (event.category === 'sotw') {
+        await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
+        continue;
+      }
+
       const eventTime = new Date(event.event_time);
       const started = eventTime.getTime() <= nowMs;
       const theme = require('./theme');

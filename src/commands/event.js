@@ -14,10 +14,10 @@ const economy = require('../services/economy');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('event')
-    .setDescription('Manage clan events and reminders')
+    .setDescription('Clan masses and calendar — not Skill of the Week')
     .addSubcommand(sub =>
       sub.setName('create')
-        .setDescription('Create a new event with automatic reminders')
+        .setDescription('Post a mass / hangout with RSVP and a 15-minute reminder')
         .addStringOption(opt => opt.setName('title').setDescription('Event title').setRequired(true))
         .addStringOption(opt => opt.setName('datetime').setDescription('When the event starts (e.g. "2024-12-25 19:00" — uses server timezone or append EST/PST/etc)').setRequired(true))
         .addStringOption(opt => opt.setName('description').setDescription('Event details, location, requirements, etc.').setRequired(false))
@@ -201,14 +201,15 @@ module.exports = {
     const now = new Date().toISOString();
     const upcoming = await db.prepare(`
       SELECT id, title, event_time FROM events
-      WHERE guild_id = ? AND event_time >= ?
+      WHERE guild_id = ? AND event_time >= ? AND ${require('../services/calendar').MASS}
       ORDER BY event_time ASC LIMIT 25
     `).all(interaction.guildId, now);
     const rows = upcoming.length
       ? upcoming
       : await db.prepare(`
           SELECT id, title, event_time FROM events
-          WHERE guild_id = ? ORDER BY event_time DESC LIMIT 25
+          WHERE guild_id = ? AND ${require('../services/calendar').MASS}
+          ORDER BY event_time DESC LIMIT 25
         `).all(interaction.guildId);
 
     const focused = interaction.options.getFocused(true);
