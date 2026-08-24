@@ -18,7 +18,7 @@ const PROMPTS = {
   sotw_poll: details =>
     `A Skill of the Week poll. Implore the clan to vote. Their choice shapes the week. Skills on the ballot: ${(details.skills || []).join(', ') || 'the council will decide'}. Rolled: ${Boolean(details.rolled)}. Auto-start: ${Boolean(details.autoStart)}.`,
   sotw_start: details =>
-    `Skill of the Week has begun for **${details.skill || 'a skill'}** (${details.days || 7} days). A trial of dedication. Glory awaits whoever tops the board.`,
+    `Skill of the Week has begun for **${details.skill || 'a skill'}** (${details.days || 7} days). ${details.wom ? 'Tracked on Wise Old Man.' : 'Discord week only — Wise Old Man is not attached.'} A trial of dedication.`,
   sotw_end: details =>
     `Skill of the Week for **${details.skill || 'a skill'}** has ended.${details.winner ? ` Champion: **${details.winner}**${details.xp ? ` with ${Number(details.xp).toLocaleString()} XP` : ''}.` : ' Nobody posted gains.'} ${details.placed || 0} on the board.`,
   sotw_standings: details =>
@@ -95,6 +95,7 @@ function fallbackOf(job, details = {}, extra = {}) {
     title: clip(extra.fallbackTitle || fill(base.title, details), 256),
     description: clip(extra.fallbackDescription || fill(base.description, details), 1800),
     color: parseColor(base.color, 3447003),
+    source: 'fallback',
   };
 }
 
@@ -161,6 +162,7 @@ async function announce(job, details = {}, extra = {}) {
       title: title || fallback.title,
       description: description || fallback.description,
       color: parseColor(parsed.color, fallback.color),
+      source: 'openai',
     };
   } catch (err) {
     const why = err.name === 'AbortError' ? `timeout ${TIMEOUT_MS}ms` : err.message;

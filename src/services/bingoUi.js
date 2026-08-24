@@ -83,15 +83,14 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
     proof: proof || null,
     status: 'pending',
   });
-  require('./aisBot').drop({
-    type: 'drop',
+  require('./aisBot').emit('drop', {
     guild_id: interaction.guildId,
     user_id: interaction.user.id,
     bingo_id: card.id,
     tile: tile.label,
     proof: proof || null,
     ts: new Date().toISOString(),
-  }).catch(err => console.warn(`AIS drop: ${err.message}`));
+  });
   await replyFlags(interaction, {
     content: `🟨 Claimed **${tile.label}**. Waiting on a mod.`,
     flags: 64,
@@ -216,16 +215,15 @@ async function handleBingoComponent(interaction) {
     await live.pin(interaction.guildId, 'bingo', card.id, interaction.channelId, msg.id);
     await bingo.saveMessage(card.id, interaction.channelId, msg.id);
     const theme = require('./theme');
-    const cardCopy = await require('./flavor').write({
+    const made = await require('./cards').make('raffle', {
       job: 'bingo_start',
       facts: { title: fresh.title },
       fallbackTitle: `${fresh.title} is live`,
       fallbackDescription: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
     });
-    await require('./announce').broadcast(interaction.client, interaction.guildId, {
+    await require('./cards').publish(interaction.client, interaction.guildId, {
       kind: 'raffle',
-      job: 'bingo_start',
-      card: cardCopy,
+      json: made.json,
       fields: [theme.field('Guild credits', require('./economy').payNote('bingo_tile'))],
       sourceChannelId: interaction.channelId,
       sourceMessageId: msg.id,

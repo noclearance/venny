@@ -92,11 +92,9 @@ async function postAnnounce(client, body) {
     return { id: sent.id, channel_id: sent.channelId };
   }
 
-  const posted = await require('./announce').broadcast(client, guildId, {
+  const posted = await require('./cards').publish(client, guildId, {
     kind: 'brand',
-    job: 'event_start',
-    facts: { title, staffNotes: description },
-    card: { title, description },
+    json: { title, description, source: 'api' },
   });
   if (!posted) throw new Error('no announce channel — /config announce-channel');
   return { id: posted.id, channel_id: posted.channelId };
@@ -114,18 +112,14 @@ async function dailySummary(client, body) {
   const gained = await wom.getGroupGained(settings.wom_group_id, skill, period, 10);
   const top = (gained || []).slice(0, 10);
   const board = theme.rankLines(top, entry => `**${entry.player.displayName}** — +${entry.data.gained.toLocaleString()} XP`);
-  const card = await require('./flavor').write({
+  const made = await require('./cards').make('sotw', {
     job: 'leaderboard_gained',
     facts: { skill, period, count: top.length },
+    extraLines: [board],
   });
-  const posted = await require('./announce').broadcast(client, guildId, {
+  const posted = await require('./cards').publish(client, guildId, {
     kind: 'sotw',
-    job: 'leaderboard_gained',
-    card: {
-      title: card.title,
-      description: [card.description, board].filter(Boolean).join('\n\n'),
-      color: card.color,
-    },
+    json: made.json,
   });
   if (!posted) throw new Error('no announce channel — /config announce-channel');
   return { id: posted.id, channel_id: posted.channelId, rows: top.length };

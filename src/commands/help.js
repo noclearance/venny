@@ -13,7 +13,7 @@ module.exports = {
       fields: [
         theme.field('Member', '`/member link` `/unlink` `/whois` `/list`'),
         theme.field('Events', '`/event create` `/list` `/cancel` `/remind`\n`/subscribe add` `/remove` `/list`'),
-        theme.field('SOTW', '`/sotw start` `/standings` `/me` `/end` `/queue` `/champions`'),
+        theme.field('SOTW', '`/sotw start` `/current` `/standings` `/me` `/update` `/end` `/queue` `/champions`'),
         theme.field('Leaderboards', '`/leaderboard hiscores` `/gained` `/player`'),
         theme.field('Raffles & votes', '`/raffle create` `/draw` `/end` `/list` `/history`\n`/vote sotw` `/botw` `/generic`'),
         theme.field('Clan', '`/clan info` `/clan sync` `/config view`'),

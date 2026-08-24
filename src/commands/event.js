@@ -9,7 +9,7 @@ const { audit } = require('../services/audit');
 const subs = require('../services/subscriptions');
 const theme = require('../services/theme');
 const economy = require('../services/economy');
-const { broadcast } = require('../services/announce');
+
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -96,8 +96,7 @@ module.exports = {
         category,
       };
 
-      const flavor = require('../services/flavor');
-      const card = await flavor.write({
+      const made = await require('../services/cards').make('event', {
         job: 'event_start',
         facts: { title, category, staffNotes: description || null },
         fallbackTitle: title,
@@ -106,19 +105,18 @@ module.exports = {
 
       await interaction.reply({
         embeds: [buildEventContent(event, await getAttendance(event.id), {
-          title: card.title,
-          intro: card.description,
-          color: card.color,
+          title: made.json.title,
+          intro: made.json.description,
+          color: made.json.color,
         })],
         components: [buildRsvpRow(event.id)],
       });
 
       const reply = await interaction.fetchReply();
       await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
-      await broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'event',
-        job: 'event_start',
-        card,
+        json: made.json,
         fields: [
           theme.field('When', theme.when(event.event_time), true),
           theme.field('Guild credits', economy.payNote('event_rsvp')),
@@ -169,26 +167,23 @@ module.exports = {
       const mentionStr = alreadyReminded
         ? null
         : await subs.buildMentionString(event.guild_id, event.category || 'general');
-      const flavor = require('../services/flavor');
-      const card = await flavor.write({
+      const made = await require('../services/cards').make('event', {
         job: 'event_remind',
         facts: { title: event.title, category: event.category || 'general', alreadyReminded },
         fallbackTitle: event.title,
         fallbackDescription: event.description || theme.line('eventSoon', event.id),
+        extraLines: [
+          event.description || null,
+          theme.when(event.event_time),
+          alreadyReminded ? 'Posted quietly — this event was already reminded.' : 'If you’re coming, be logged in.',
+        ],
+        fields: [
+          theme.field('Guild credits', economy.payNote(event.category === 'sotw' ? 'sotw_win' : 'event_rsvp')),
+        ],
       });
       await interaction.reply({
         content: mentionStr || undefined,
-        embeds: [theme.fromJson('event', card, {
-          description: [
-            card.description,
-            event.description && event.description !== card.description ? event.description : null,
-            theme.when(event.event_time),
-            alreadyReminded ? 'Posted quietly — this event was already reminded.' : 'If you’re coming, be logged in.',
-          ].filter(Boolean).join('\n\n'),
-          fields: [
-            theme.field('Guild credits', economy.payNote(event.category === 'sotw' ? 'sotw_win' : 'event_rsvp')),
-          ],
-        })],
+        embeds: [made.embed],
         allowedMentions: alreadyReminded ? { parse: [] } : { parse: ['users', 'roles'] },
       });
       if (!alreadyReminded) {

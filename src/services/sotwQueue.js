@@ -65,10 +65,10 @@ async function startNextQueuedSotw(guildId, client) {
           title: `${next.skill} SOTW`,
           description: theme.line('sotwOpen', next.skill),
         };
-        await require('./announce').broadcast(client, guildId, {
+        await require('./cards').publish(client, guildId, {
           kind: 'sotw',
-          job: 'sotw_start',
-          card,
+          json: card,
+          extraLines: [result.tracking],
           fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,

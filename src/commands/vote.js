@@ -163,20 +163,19 @@ module.exports = {
       const endsAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
       const theme = require('../services/theme');
 
-      const card = await require('../services/flavor').write({
+      const made = await require('../services/cards').make('poll', {
         job: 'vote_generic',
         facts: { question },
         fallbackTitle: 'Clan vote',
         fallbackDescription: 'One vote. Hit the poll under this card.',
+        extraLines: [question],
+        fields: [
+          theme.field('Closes', theme.when(endsAt.toISOString()), true),
+        ],
       });
 
       const pollMsg = await postAnnouncedPoll(interaction, {
-        embed: theme.fromJson('poll', card, {
-          description: [card.description, question].join('\n\n'),
-          fields: [
-            theme.field('Closes', theme.when(endsAt.toISOString()), true),
-          ],
-        }),
+        embed: made.embed,
         poll: {
           question: { text: question.slice(0, 300) },
           answers: uniqueOptions.map(o => ({ text: o })),
@@ -191,10 +190,9 @@ module.exports = {
         VALUES (?, 'generic', ?, ?, ?, ?, ?, 0, ?)
       `).run(interaction.guildId, question, interaction.channelId, pollMsg.id, JSON.stringify(uniqueOptions), endsAt.toISOString(), interaction.user.id);
 
-      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'poll',
-        job: 'vote_generic',
-        card,
+        json: made.json,
         fields: [theme.field('Closes', theme.when(endsAt.toISOString()), true)],
         sourceChannelId: pollMsg.channelId,
         sourceMessageId: pollMsg.id,
@@ -345,7 +343,7 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
     ? 'Vote BOTW — I rolled these'
     : 'Vote for the next Boss of the Week';
 
-  const card = await require('../services/flavor').write({
+  const made = await require('../services/cards').make('poll', {
     job: 'vote_botw',
     facts: { rolled: Boolean(rolled), bosses: uniqueBosses },
     fallbackTitle: 'Boss of the Week',
@@ -353,19 +351,17 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
       'One vote. Pick the boss for next week.',
       rolled ? theme.line('voteRoll', Date.now()) : null,
     ].filter(Boolean).join('\n\n'),
+    extraLines: [
+      'Winner is whoever the clan picks. After it closes, a mod starts it with `/boss week`. I do not auto-track KC off this poll yet.',
+    ],
+    fields: [
+      theme.field('Closes', theme.when(endsAt.toISOString()), true),
+      theme.field(rolled ? 'I rolled' : 'On the ballot', uniqueBosses.join('\n')),
+    ],
   });
 
   const pollMsg = await postAnnouncedPoll(interaction, {
-    embed: theme.fromJson('poll', card, {
-      description: [
-        card.description,
-        'Winner is whoever the clan picks. After it closes, a mod starts it with `/boss week`. I do not auto-track KC off this poll yet.',
-      ].filter(Boolean).join('\n\n'),
-      fields: [
-        theme.field('Closes', theme.when(endsAt.toISOString()), true),
-        theme.field(rolled ? 'I rolled' : 'On the ballot', uniqueBosses.join('\n')),
-      ],
-    }),
+    embed: made.embed,
     poll: {
       question: { text: questionText.slice(0, 300) },
       answers: uniqueBosses.map(b => ({ text: String(b).slice(0, 55) })),
@@ -380,10 +376,9 @@ async function postBotwPoll(interaction, db, uniqueBosses, { rolled } = {}) {
     VALUES (?, 'botw', ?, ?, ?, ?, ?, 0, ?)
   `).run(interaction.guildId, questionText, interaction.channelId, pollMsg.id, JSON.stringify(uniqueBosses), endsAt.toISOString(), interaction.user.id);
 
-  await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+  await require('../services/cards').publish(interaction.client, interaction.guildId, {
     kind: 'poll',
-    job: 'vote_botw',
-    card,
+    json: made.json,
     fields: [
       theme.field('Closes', theme.when(endsAt.toISOString()), true),
       theme.field(rolled ? 'I rolled' : 'On the ballot', uniqueBosses.join('\n')),
@@ -412,7 +407,7 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     ? 'Vote SOTW — I rolled these'
     : 'Vote for the next Skill of the Week';
 
-  const card = await require('../services/flavor').write({
+  const made = await require('../services/cards').make('sotw', {
     job: 'vote_sotw',
     facts: { rolled: Boolean(rolled), skills: uniqueSkills, autoStart, days: sotwDuration },
     fallbackTitle: 'Skill of the Week',
@@ -420,23 +415,21 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
       'One vote. Pick the skill for the next week.',
       rolled ? theme.line('voteRoll', Date.now()) : null,
     ].filter(Boolean).join('\n\n'),
+    extraLines: [
+      autoStart
+        ? `Winner goes on Wise Old Man and the clan calendar for **${sotwDuration} days**. Gains count from that moment. \`/sotw me\` after it starts.`
+        : 'Votes only — this will not start a week on Wise Old Man.',
+    ],
+    fields: [
+      theme.field('Closes', theme.when(endsAt), true),
+      theme.field('Week', `${sotwDuration} days`, true),
+      theme.field(rolled ? 'I rolled' : 'On the ballot', labels.join('\n')),
+      theme.field('Guild credits', economy.payNote('sotw_win')),
+    ],
   });
 
   const pollMsg = await postAnnouncedPoll(interaction, {
-    embed: theme.fromJson('sotw', card, {
-      description: [
-        card.description,
-        autoStart
-          ? `Winner goes on Wise Old Man and the clan calendar for **${sotwDuration} days**. Gains count from that moment. \`/sotw me\` after it starts.`
-          : 'Votes only — this will not start a week on Wise Old Man.',
-      ].filter(Boolean).join('\n\n'),
-      fields: [
-        theme.field('Closes', theme.when(endsAt), true),
-        theme.field('Week', `${sotwDuration} days`, true),
-        theme.field(rolled ? 'I rolled' : 'On the ballot', labels.join('\n')),
-        theme.field('Guild credits', economy.payNote('sotw_win')),
-      ],
-    }),
+    embed: made.embed,
     poll: {
       question: { text: questionText.slice(0, 300) },
       answers: labels.map(text => ({ text: text.slice(0, 55) })),
@@ -461,10 +454,9 @@ async function postSotwPoll(interaction, db, uniqueSkills, { rolled } = {}) {
     interaction.user.id
   );
 
-  await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+  await require('../services/cards').publish(interaction.client, interaction.guildId, {
     kind: 'sotw',
-    job: 'vote_sotw',
-    card,
+    json: made.json,
     fields: [
       theme.field('Closes', theme.when(endsAt), true),
       theme.field('Guild credits', economy.payNote('sotw_win')),

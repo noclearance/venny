@@ -64,17 +64,15 @@ module.exports = {
 
         const theme = require('../services/theme');
         const board = theme.rankLines(hiscores, entry => `**${entry.player.displayName}** — ${entry.data.experience.toLocaleString()} XP · lvl ${entry.data.level}`);
-        const card = await require('../services/flavor').write({
+        const made = await require('../services/cards').make('info', {
           job: 'leaderboard_hiscores',
           facts: { skill, count: hiscores.length },
           fallbackTitle: `${wom.getSkillEmoji(skill)}  Clan hiscores · ${skill}`,
-          fallbackDescription: '',
+          extraLines: [board],
+          thumbnail: theme.skillIconUrl(skill),
         });
         await interaction.editReply({
-          embeds: [theme.fromJson('info', card, {
-            description: [card.description, board].filter(Boolean).join('\n\n'),
-            thumbnail: theme.skillIconUrl(skill),
-          })],
+          embeds: [made.embed],
         });
       } catch (err) {
         await interaction.editReply(`❌ Failed to fetch hiscores: ${err.message}`);
@@ -103,18 +101,16 @@ module.exports = {
         const top = gained.slice(0, 10);
         const theme = require('../services/theme');
         const board = theme.rankLines(top, entry => `**${entry.player.displayName}** — +${entry.data.gained.toLocaleString()} XP`);
-        const card = await require('../services/flavor').write({
+        const made = await require('../services/cards').make('sotw', {
           job: 'leaderboard_gained',
           facts: { skill, period, count: top.length },
           fallbackTitle: `${wom.getSkillEmoji(skill)}  XP gained · ${skill}`,
-          fallbackDescription: '',
+          extraLines: [board],
+          thumbnail: theme.skillIconUrl(skill),
+          fields: [theme.field('Period', period, true)],
         });
         await interaction.editReply({
-          embeds: [theme.fromJson('sotw', card, {
-            description: [card.description, board].filter(Boolean).join('\n\n'),
-            thumbnail: theme.skillIconUrl(skill),
-            fields: [theme.field('Period', period, true)],
-          })],
+          embeds: [made.embed],
         });
       } catch (err) {
         await interaction.editReply(`❌ Failed to fetch gains: ${err.message}`);

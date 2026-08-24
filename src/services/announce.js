@@ -8,15 +8,13 @@ function jumpUrl(guildId, channelId, messageId) {
 
 async function broadcast(client, guildId, {
   kind = 'brand',
+  json,
   title,
   description,
   fields,
   sourceChannelId,
   sourceMessageId,
   mention,
-  job,
-  facts,
-  card,
 } = {}) {
   if (!client || !guildId) return null;
   const settings = await getDb().prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
@@ -24,40 +22,22 @@ async function broadcast(client, guildId, {
   if (!channelId) return null;
   if (sourceChannelId && String(sourceChannelId) === String(channelId)) return null;
 
-  let json = card;
-  if (!json && job) {
-    json = await require('./flavor').announce(job, facts || { title, description });
-  }
-  if (!json) {
-    json = { title, description };
-  }
-
+  const face = json || { title, description };
   const jump = jumpUrl(guildId, sourceChannelId, sourceMessageId);
   const extra = [...(fields || [])];
   if (jump) extra.push(theme.field('Details', `[Click here to view the event!](${jump})`));
 
   try {
     const channel = await client.channels.fetch(channelId);
-    const posted = await channel.send({
+    return channel.send({
       content: mention || undefined,
       allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] },
-      embeds: [theme.fromJson(kind, json, {
+      embeds: [theme.fromJson(kind, face, {
         fields: extra,
         url: jump || undefined,
         timestamp: true,
       })],
     });
-    require('./aisBot').webhook({
-      type: 'webhook',
-      guild_id: guildId,
-      kind,
-      job: job || null,
-      title: json.title || title || null,
-      description: json.description || description || null,
-      jump,
-      ts: new Date().toISOString(),
-    }).catch(err => console.warn(`AIS webhook: ${err.message}`));
-    return posted;
   } catch (err) {
     console.warn(`Announce channel failed: ${err.message}`);
     if (/Missing Access|Unknown Channel|Missing Permissions/i.test(err.message || '')) {

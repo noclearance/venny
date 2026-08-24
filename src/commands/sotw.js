@@ -83,11 +83,6 @@ module.exports = {
     const db = getDb();
     const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
 
-    const modSubs = ['start', 'end', 'update', 'cancel'];
-    if (modSubs.includes(sub) && !isModerator(interaction.member)) {
-      return interaction.reply({ content: '❌ You need **Manage Events**, **Manage Server**, or **Administrator** permission to manage SOTW.', flags: 64 });
-    }
-
     // ── Start ──────────────────────────────────
     if (sub === 'start') {
       const skill = interaction.options.getString('skill');
@@ -113,19 +108,10 @@ module.exports = {
       await interaction.editReply(result.embed ? { embeds: [result.embed] } : result.response);
       const posted = await interaction.fetchReply();
       const theme = require('../services/theme');
-      const card = result.card || {
-        title: `${skill} SOTW`,
-        description: theme.line('sotwOpen', `${skill}-${result.sotwId}`),
-      };
-      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'sotw',
-        job: 'sotw_start',
-        card: {
-          ...card,
-          description: [card.description, result.womCompetitionId
-            ? `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${result.womCompetitionId}).`
-            : 'Discord week is live. Wise Old Man did not get a competition — `/sotw update` to attach one.'].join('\n\n'),
-        },
+        json: result.card,
+        extraLines: [result.tracking],
         fields: [
           theme.field('Guild credits', require('../services/economy').payNote('sotw_win')),
         ],
@@ -143,7 +129,8 @@ module.exports = {
         return interaction.reply({ content: 'No SOTW running. A mod can `/sotw start`.', flags: 64 });
       }
       const theme = require('../services/theme');
-      const womLine = sotw.wom_competition_id
+      const status = require('../services/sotw').statusOf(sotw);
+      const womLine = status === 'wom'
         ? `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${sotw.wom_competition_id}). \`/sotw standings\` for the board.`
         : 'This Discord week **is** live. Wise Old Man never got a competition (title too long, missing `/config`, or WOM 400). `/sotw update` tries to attach one.';
       return interaction.reply({
@@ -189,27 +176,24 @@ module.exports = {
         const board = participations.length === 0
           ? theme.line('sotwEmpty', sotw.id)
           : `${theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)}${extra}`;
-        const card = await require('../services/flavor').write({
+        const made = await require('../services/cards').make('sotw', {
           job: 'sotw_standings',
           facts: { skill: sotw.skill, onBoard: participations.length },
           fallbackTitle: `${sotw.skill} SOTW`,
+          extraLines: participations.length === 0 ? [] : [board],
           fallbackDescription: participations.length === 0 ? board : '',
+          thumbnail: theme.skillIconUrl(sotw.skill),
+          url: sotw.wom_competition_id
+            ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`
+            : undefined,
+          fields: [
+            theme.field('Ends', `<t:${endTs}:R>`, true),
+            theme.field('On the board', String(participations.length), true),
+          ],
         });
 
         const reply = await interaction.editReply({
-          embeds: [theme.fromJson('sotw', card, {
-            description: participations.length === 0
-              ? (card.description || board)
-              : [card.description, board].filter(Boolean).join('\n\n'),
-            thumbnail: theme.skillIconUrl(sotw.skill),
-            url: sotw.wom_competition_id
-              ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`
-              : undefined,
-            fields: [
-              theme.field('Ends', `<t:${endTs}:R>`, true),
-              theme.field('On the board', String(participations.length), true),
-            ],
-          })],
+          embeds: [made.embed],
         });
         await require('../services/live').pin(interaction.guildId, 'sotw', sotw.id, interaction.channelId, reply.id);
       } catch (err) {

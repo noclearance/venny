@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, Partials, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
 require('dotenv').config();
 
 const fs = require('fs');
@@ -7,6 +7,7 @@ const { initDb } = require('./db/database');
 const { ensureGuildSettings } = require('./services/guild');
 const { registerCommands } = require('./deploy-commands');
 const { startServer } = require('./services/webhooks');
+const { watchDiscord } = require('./services/discordWatch');
 
 function validateEnv() {
   const token = process.env.DISCORD_TOKEN;
@@ -72,53 +73,8 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
   }
 }
 
-  client.bootAt = Date.now();
+  watchDiscord(client);
   startServer(client);
-
-  let reconnectTimer = null;
-  function armReconnectWatch(why) {
-    if (reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
-      if (client.isReady()) {
-        reconnectTimer = null;
-        return;
-      }
-      console.error(`Discord still down after ${why}. Exiting so Render restarts.`);
-      process.exit(1);
-    }, 45_000);
-  }
-  function clearReconnectWatch() {
-    if (!reconnectTimer) return;
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-
-  setInterval(() => {
-    if (client.isReady()) return;
-    if (Date.now() - client.bootAt < 90_000) return;
-    console.error('HTTP is up but Discord is not. Exiting so Render restarts.');
-    process.exit(1);
-  }, 30_000).unref();
-
-  client.on(Events.Error, err => {
-    console.error('Discord client error:', err.message);
-  });
-  client.on(Events.ShardError, (err, id) => {
-    console.error(`Discord shard ${id} error:`, err.message);
-  });
-  client.on(Events.ShardDisconnect, (event, id) => {
-    console.error(`Discord shard ${id} disconnected (${event?.code || '?'}).`);
-    armReconnectWatch(`shard ${id} disconnect`);
-  });
-  client.on(Events.ShardResume, () => {
-    console.log('Discord shard resumed.');
-    clearReconnectWatch();
-  });
-  client.on(Events.ClientReady, () => clearReconnectWatch());
-  client.on(Events.Invalidated, () => {
-    console.error('Discord session invalidated. Exiting so Render restarts.');
-    process.exit(1);
-  });
 
   registerCommands().catch(err => {
     console.error('Failed to register slash commands on startup:', err.message);

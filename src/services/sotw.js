@@ -29,10 +29,15 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
         groupId: settings.wom_group_id,
         groupVerificationCode: settings.wom_verif_code,
       });
-      womCompetitionId = comp.competition.id;
-      console.log(`Created WOM competition ${womCompetitionId}: ${finalTitle}`);
+      womCompetitionId = comp.competition?.id || comp.id || null;
+      if (!womCompetitionId) {
+        womError = 'WOM did not return a competition id.';
+      } else {
+        console.log(`Created WOM competition ${womCompetitionId}: ${finalTitle}`);
+      }
     } catch (err) {
       womError = err.message;
+      womCompetitionId = null;
       console.error('Failed to create WOM competition:', err.message);
     }
   }
@@ -55,12 +60,10 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   }
 
   const economy = require('./economy');
-  const card = await require('./flavor').write({
+  const made = await require('./cards').make('sotw', {
     job: 'sotw_start',
-    facts: { skill, days: durationDays },
-  });
-  const embed = theme.fromJson('sotw', card, {
-    description: [card.description, tracking].join('\n\n'),
+    facts: { skill, days: durationDays, wom: Boolean(womCompetitionId) },
+    extraLines: [tracking],
     thumbnail: theme.skillIconUrl(skill),
     url: womCompetitionId ? `https://wiseoldman.net/competitions/${womCompetitionId}` : undefined,
     fields: [
@@ -69,6 +72,8 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
       theme.field('Guild credits', economy.payNote('sotw_win')),
     ],
   });
+  const embed = made.embed;
+  const card = made.json;
 
   const response = [
     `🏆 **SOTW started** — **${skill.toUpperCase()}**`,
@@ -92,7 +97,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     console.error('SOTW calendar event failed:', err.message);
   }
 
-  return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card };
+  return { success: true, response, embed, sotwId: result.lastInsertRowid, womCompetitionId, card, tracking };
 }
 
 async function linkWomIfMissing(sotw) {
@@ -112,7 +117,7 @@ async function linkWomIfMissing(sotw) {
       groupId: settings.wom_group_id,
       groupVerificationCode: settings.wom_verif_code,
     });
-    const id = comp.competition?.id;
+    const id = comp.competition?.id || comp.id;
     if (!id) return { sotw, created: false, error: 'WOM did not return a competition id.' };
     await db.prepare('UPDATE sotw SET wom_competition_id = ? WHERE id = ?').run(id, sotw.id);
     console.log(`Linked WOM competition ${id} to SOTW #${sotw.id}`);
@@ -123,4 +128,10 @@ async function linkWomIfMissing(sotw) {
   }
 }
 
-module.exports = { startSotw, linkWomIfMissing };
+function statusOf(sotw) {
+  if (!sotw || Number(sotw.ended)) return 'ended';
+  if (sotw.wom_competition_id) return 'wom';
+  return 'local';
+}
+
+module.exports = { startSotw, linkWomIfMissing, statusOf };

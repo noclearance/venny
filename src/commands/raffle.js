@@ -90,12 +90,6 @@ module.exports = {
       const theme = require('../services/theme');
       const economy = require('../services/economy');
       const prize = description !== 'Click the button below to enter!' ? description : '';
-      const card = await require('../services/flavor').write({
-        job: 'raffle_start',
-        facts: { title, prize: prize || null, weighted: weightMode !== 'none' },
-        fallbackTitle: title,
-        fallbackDescription: theme.line('raffleOpen', raffleId),
-      });
       const ticket = ticketGp > 0 ? `${ticketGp.toLocaleString()} GP` : 'Free';
       const how = prize
         ? 'Pay staff in game, `/member link` your RSN, then tap **Enter Raffle**.'
@@ -107,19 +101,23 @@ module.exports = {
         theme.field('How to enter', how),
         theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
       ];
+      const made = await require('../services/cards').make('raffle', {
+        job: 'raffle_start',
+        facts: { title, prize: prize || null, weighted: weightMode !== 'none' },
+        fallbackTitle: title,
+        fallbackDescription: theme.line('raffleOpen', raffleId),
+        fields,
+        footer: `Raffle #${raffleId}  ·  Misclickers`,
+        timestamp: true,
+      });
       const reply = await interaction.reply({
-        embeds: [theme.fromJson('raffle', card, {
-          fields,
-          footer: `Raffle #${raffleId}  ·  Misclickers`,
-          timestamp: true,
-        })],
+        embeds: [made.embed],
         components: [row],
         fetchReply: true,
       });
-      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
-        job: 'raffle_start',
-        card,
+        json: made.json,
         fields: [
           prize ? theme.field('Prize', prize) : null,
           theme.field('Ticket', ticketGp > 0 ? `${ticket} each` : 'Free', true),
@@ -220,31 +218,29 @@ module.exports = {
       await require('../services/economy').award(interaction.guildId, winner.user_id, 'raffle_win', interaction.client);
 
       const theme = require('../services/theme');
-      const card = await require('../services/flavor').write({
+      const made = await require('../services/cards').make('raffle', {
         job: 'raffle_win',
         facts: { title: raffle.title, prize: raffle.description, entries: entries.length },
         fallbackTitle: `${raffle.title} — drawn`,
         fallbackDescription: theme.line('raffleWon', raffle.id),
+        fields: [
+          theme.field('Winner', `<@${winner.user_id}>`, true),
+          theme.field('Entries', String(entries.length), true),
+          raffle.description && raffle.description !== 'Click the button below to enter!'
+            ? theme.field('Prize', raffle.description)
+            : null,
+          weightInfo.trim() ? theme.field('Odds', weightInfo.trim()) : null,
+        ],
+        footer: `Raffle #${id}  ·  Misclickers`,
+        timestamp: true,
       });
       const drawMsg = await interaction.reply({
-        embeds: [theme.fromJson('raffle', card, {
-          fields: [
-            theme.field('Winner', `<@${winner.user_id}>`, true),
-            theme.field('Entries', String(entries.length), true),
-            raffle.description && raffle.description !== 'Click the button below to enter!'
-              ? theme.field('Prize', raffle.description)
-              : null,
-            weightInfo.trim() ? theme.field('Odds', weightInfo.trim()) : null,
-          ],
-          footer: `Raffle #${id}  ·  Misclickers`,
-          timestamp: true,
-        })],
+        embeds: [made.embed],
         fetchReply: true,
       });
-      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
-        job: 'raffle_win',
-        card,
+        json: made.json,
         fields: [
           theme.field('Winner', `<@${winner.user_id}>`),
           theme.field('Guild credits', require('../services/economy').payNote('raffle_win')),
@@ -278,29 +274,27 @@ module.exports = {
       await db.prepare('UPDATE raffles SET drawn = 1, winner_id = NULL WHERE id = ?').run(id);
 
       const theme = require('../services/theme');
-      const card = await require('../services/flavor').write({
+      const made = await require('../services/cards').make('raffle', {
         job: 'raffle_end',
         facts: { title: raffle.title },
         fallbackTitle: `${raffle.title} — closed`,
         fallbackDescription: 'No winner. The Enter button is dead.',
+        fields: [
+          theme.field('Entries', String(count?.count || 0), true),
+          raffle.description && raffle.description !== 'Click the button below to enter!'
+            ? theme.field('Prize', raffle.description)
+            : null,
+        ],
+        footer: `Raffle #${id}  ·  Misclickers`,
+        timestamp: true,
       });
       const closed = await interaction.reply({
-        embeds: [theme.fromJson('raffle', card, {
-          fields: [
-            theme.field('Entries', String(count?.count || 0), true),
-            raffle.description && raffle.description !== 'Click the button below to enter!'
-              ? theme.field('Prize', raffle.description)
-              : null,
-          ],
-          footer: `Raffle #${id}  ·  Misclickers`,
-          timestamp: true,
-        })],
+        embeds: [made.embed],
         fetchReply: true,
       });
-      await require('../services/announce').broadcast(interaction.client, interaction.guildId, {
+      await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
-        job: 'raffle_end',
-        card,
+        json: made.json,
         sourceChannelId: closed.channelId,
         sourceMessageId: closed.id,
       });

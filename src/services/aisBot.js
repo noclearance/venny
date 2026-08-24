@@ -1,9 +1,15 @@
-// Outbound client for the AIS / hub bot API.
-// Native fetch (Node 22+). No-op without BOT_SECRET. Never throws into Discord commands.
+// Outbound hub ingest. No-op without BOT_SECRET. Never throws into Discord commands.
 
 const DEFAULT_BASE = 'https://ais-dev-a4ljbswi2bmxa7yw7w7wwz-641223815059.us-east1.run.app/api/bot';
 const TIMEOUT_MS = 8000;
 const MAX_BODY = 80_000;
+
+const ROUTES = {
+  webhook: '/webhook',
+  misclick: '/misclick',
+  drop: '/drop',
+  sync: '/sync',
+};
 
 function baseUrl() {
   return (process.env.AIS_BOT_URL || DEFAULT_BASE).replace(/\/+$/, '');
@@ -11,14 +17,6 @@ function baseUrl() {
 
 function secret() {
   return (process.env.BOT_SECRET || '').trim();
-}
-
-function headers() {
-  return {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    'X-Venny-Secret': secret(),
-  };
 }
 
 function validatePayload(payload) {
@@ -49,7 +47,11 @@ async function post(path, payload) {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: headers(),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-Venny-Secret': secret(),
+      },
       body,
       signal: controller.signal,
     });
@@ -59,7 +61,7 @@ async function post(path, payload) {
       return { ok: false, status: res.status };
     }
     console.log(`AIS POST ${path}: ok ${res.status}`);
-    return { ok: true, status: res.status, body: text.slice(0, 500) };
+    return { ok: true, status: res.status };
   } catch (err) {
     const why = err.name === 'AbortError' ? `timeout ${TIMEOUT_MS}ms` : err.message;
     console.warn(`AIS POST ${path}: ${why}`);
@@ -69,20 +71,12 @@ async function post(path, payload) {
   }
 }
 
-function webhook(payload) {
-  return post('/webhook', payload);
-}
-
-function misclick(payload) {
-  return post('/misclick', payload);
-}
-
-function drop(payload) {
-  return post('/drop', payload);
-}
-
-function sync(payload) {
-  return post('/sync', payload);
+function emit(event, payload) {
+  const path = ROUTES[event] || ROUTES.webhook;
+  return post(path, { type: event, ...payload }).catch(err => {
+    console.warn(`AIS ${event}: ${err.message}`);
+    return { ok: false, error: err.message };
+  });
 }
 
 function classifyHook(hook = {}, body = {}) {
@@ -95,8 +89,7 @@ function classifyHook(hook = {}, body = {}) {
 
 function ingestIncoming(hook, body) {
   const kind = classifyHook(hook, body);
-  const payload = {
-    type: kind,
+  return emit(kind, {
     guild_id: hook.guild_id || null,
     source: body.source || hook.name || 'hook',
     title: body.title || hook.name || null,
@@ -104,86 +97,13 @@ function ingestIncoming(hook, body) {
     image_url: body.image_url || body.image || null,
     data: body,
     ts: new Date().toISOString(),
-  };
-  if (kind === 'misclick') return misclick(payload);
-  if (kind === 'drop') return drop(payload);
-  if (kind === 'sync') return sync(payload);
-  return webhook(payload);
-}
-
-let streamAbort = null;
-
-async function startEventStream(onEvent) {
-  if (!secret()) {
-    console.log('AIS hub: off (set BOT_SECRET to push / pull)');
-    return null;
-  }
-  if (streamAbort) return streamAbort;
-
-  streamAbort = new AbortController();
-  const url = `${baseUrl()}/events/stream`;
-  console.log(`AIS hub: ${baseUrl()}`);
-
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'text/event-stream',
-        'X-Venny-Secret': secret(),
-      },
-      signal: streamAbort.signal,
-    });
-    const type = String(res.headers.get('content-type') || '');
-    if (!res.ok || !type.includes('event-stream')) {
-      console.warn(`AIS GET /events/stream: HTTP ${res.status} ${type || 'no content-type'} — hub is not streaming yet`);
-      streamAbort.abort();
-      streamAbort = null;
-      return null;
-    }
-    console.log('AIS GET /events/stream: connected');
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    (async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const chunks = buf.split('\n\n');
-          buf = chunks.pop() || '';
-          for (const chunk of chunks) {
-            const dataLine = chunk.split('\n').find(l => l.startsWith('data:'));
-            if (!dataLine) continue;
-            try {
-              const data = JSON.parse(dataLine.slice(5).trim());
-              if (typeof onEvent === 'function') onEvent(data);
-            } catch (err) {
-              console.warn(`AIS stream JSON: ${err.message}`);
-            }
-          }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') console.warn(`AIS stream: ${err.message}`);
-      } finally {
-        streamAbort = null;
-      }
-    })();
-  } catch (err) {
-    if (err.name !== 'AbortError') console.warn(`AIS GET /events/stream: ${err.message}`);
-    streamAbort = null;
-  }
-  return streamAbort;
+  });
 }
 
 module.exports = {
   post,
-  webhook,
-  misclick,
-  drop,
-  sync,
+  emit,
   ingestIncoming,
   classifyHook,
-  startEventStream,
   baseUrl,
 };
