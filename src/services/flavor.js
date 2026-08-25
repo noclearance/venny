@@ -3,7 +3,7 @@
 // Callers build the card from that object. Extra facts (credits, jump, prize)
 // are fields added in code — same as Grazy's from_dict + extra field.
 
-const TIMEOUT_MS = 12000;
+const TIMEOUT_MS = 30000;
 const MODEL = 'gpt-4o-mini';
 
 const PERSONA = `You are Venny, grandmaster of clan events for Misclickers, an Old School RuneScape Discord clan.
@@ -129,7 +129,7 @@ async function announce(job, details = {}, extra = {}) {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.9,
-        max_tokens: 450,
+        max_tokens: 280,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: PERSONA },

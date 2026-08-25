@@ -6,14 +6,24 @@ const REMIND_AHEAD_MS = 15 * 60 * 1000;
 const REMIND_GRACE_MS = 30 * 60 * 1000;
 
 function startReminderPoller(client) {
-  setInterval(() => tick(client).catch(err => {
-    console.error('Reminder poller tick failed:', err.message);
-  }), CHECK_INTERVAL);
+  let running = false;
+  const run = () => {
+    if (running) {
+      console.warn('Reminder tick still running; skipping this interval');
+      return;
+    }
+    running = true;
+    tick(client)
+      .catch(err => {
+        console.error('Reminder poller tick failed:', err.message);
+      })
+      .finally(() => {
+        running = false;
+      });
+  };
 
-  // Catch up immediately on boot so downtime does not skip due work
-  tick(client).catch(err => {
-    console.error('Reminder poller startup tick failed:', err.message);
-  });
+  setInterval(run, CHECK_INTERVAL);
+  run();
 }
 
 async function tick(client) {
