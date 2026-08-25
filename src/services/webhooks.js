@@ -48,6 +48,10 @@ function startServer(client) {
       return;
     }
     if (url.startsWith('/api/')) {
+      if (req.method === 'OPTIONS') {
+        require('./api').preflight(req, res);
+        return;
+      }
       const handled = await require('./api').handleApi(req, res, client);
       if (handled) return;
     }
@@ -92,7 +96,7 @@ function startServer(client) {
   });
 
   server.listen(port, () => {
-    console.log(`HTTP :${port}  GET /health  POST /api/announce  POST /hook/<token>`);
+    console.log(`HTTP :${port}  GET /health  POST /api/announce  POST /api/sync-rank  POST /hook/<token>`);
   });
   return server;
 }
