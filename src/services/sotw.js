@@ -55,21 +55,39 @@ async function attachCompetition(sotw, comp) {
   };
 }
 
+function womFutureRange(startsAt, endsAt) {
+  const minStart = Date.now() + 120_000;
+  let start = new Date(startsAt).getTime();
+  let end = new Date(endsAt).getTime();
+  if (!Number.isFinite(start) || start < minStart) start = minStart;
+  if (!Number.isFinite(end) || end <= start + 60_000) end = start + 7 * 86400000;
+  return {
+    startsAt: new Date(start).toISOString(),
+    endsAt: new Date(end).toISOString(),
+  };
+}
+
 async function createCompetition(sotw, settings, title) {
   const db = getDb();
+  const range = womFutureRange(sotw.starts_at, sotw.ends_at);
   const comp = await wom.createCompetition({
     title: String(title || `SOTW ${String(sotw.skill || '').toUpperCase()}`).slice(0, 50),
     metric: sotw.skill,
-    startsAt: sotw.starts_at,
-    endsAt: sotw.ends_at,
+    startsAt: range.startsAt,
+    endsAt: range.endsAt,
     groupId: settings.wom_group_id,
     groupVerificationCode: settings.wom_verif_code,
   });
   const id = competitionId(comp);
   if (!id) return { sotw, linked: false, created: false, error: 'WOM did not return a competition id.' };
-  await db.prepare('UPDATE sotw SET wom_competition_id = ? WHERE id = ?').run(id, sotw.id);
+  await db.prepare('UPDATE sotw SET wom_competition_id = ?, starts_at = ?, ends_at = ? WHERE id = ?')
+    .run(id, range.startsAt, range.endsAt, sotw.id);
   console.log(`Created WOM competition ${id} for SOTW #${sotw.id}`);
-  return { sotw: { ...sotw, wom_competition_id: id }, linked: true, created: true };
+  return {
+    sotw: { ...sotw, wom_competition_id: id, starts_at: range.startsAt, ends_at: range.endsAt },
+    linked: true,
+    created: true,
+  };
 }
 
 async function ensureWomWeek(sotw, { title } = {}) {
