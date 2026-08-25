@@ -91,7 +91,22 @@ function readBody(req, limit = 80_000) {
 }
 
 function guildIdFrom(body) {
-  return String(body?.guild_id || process.env.GUILD_ID || '').trim();
+  return String(body?.guild_id || process.env.GUILD_ID || process.env.CLAN_GUILD_ID || '').trim();
+}
+
+function clanRankNames() {
+  return {
+    trial: process.env.ROLE_TRIAL || 'Trial',
+    member: process.env.ROLE_MEMBER || 'Member',
+    veteran: process.env.ROLE_VETERAN || 'Veteran',
+    officer: process.env.ROLE_OFFICER || 'Officer',
+    admin: process.env.ROLE_ADMIN || 'Admin',
+  };
+}
+
+function discordNameForRank(rank) {
+  const key = String(rank || '').trim().toLowerCase();
+  return clanRankNames()[key] || String(rank || '').trim();
 }
 
 async function status(client) {
@@ -165,20 +180,23 @@ async function resolveRole(guild, body) {
     if (!role) throw new Error('role_id is not a role on this server');
     return role;
   }
-  const name = String(body.rank || body.role || body.name || '').trim();
-  if (!name) throw new Error('rank or role_id required');
+  const name = discordNameForRank(body.rank || body.role || body.name);
+  if (!name) throw new Error('discord_id and rank required');
   const roles = await guild.roles.fetch();
   const role = roles.find(r => r.name.toLowerCase() === name.toLowerCase());
   if (!role) throw new Error(`no Discord role named "${name}"`);
   return role;
 }
 
-function stripIds(body, keepId) {
+function clanRankRoleIds(guild) {
+  const names = new Set(Object.values(clanRankNames()).map(n => n.toLowerCase()));
+  return guild.roles.cache.filter(r => names.has(r.name.toLowerCase()));
+}
+
+function extraStripIds(body) {
   const raw = body.rank_role_ids || body.rankRoleIds || body.remove_role_ids || body.removeRoleIds || [];
   const list = Array.isArray(raw) ? raw : String(raw).split(',');
-  const ids = new Set(list.map(snowflake).filter(Boolean));
-  ids.delete(String(keepId));
-  return ids;
+  return new Set(list.map(snowflake).filter(Boolean));
 }
 
 async function syncRank(client, body) {
@@ -189,6 +207,7 @@ async function syncRank(client, body) {
   if (!userId) throw new Error('discord_id required');
 
   const guild = await client.guilds.fetch(guildId);
+  await guild.roles.fetch();
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) throw new Error('that Discord user is not in this server');
 
@@ -198,13 +217,13 @@ async function syncRank(client, body) {
   const removed = [];
 
   if (exclusive) {
-    const strip = stripIds(body, role.id);
-    if (strip.size) {
-      const gone = member.roles.cache.filter(r => strip.has(r.id));
-      if (gone.size) {
-        await member.roles.remove(gone, reason);
-        for (const r of gone.values()) removed.push({ id: r.id, name: r.name });
-      }
+    const extra = extraStripIds(body);
+    const gone = member.roles.cache.filter(r => (
+      r.id !== role.id && (clanRankRoleIds(guild).has(r.id) || extra.has(r.id))
+    ));
+    if (gone.size) {
+      await member.roles.remove(gone, reason);
+      for (const r of gone.values()) removed.push({ id: r.id, name: r.name });
     }
   }
 
