@@ -1,11 +1,14 @@
 const { audit } = require('./audit');
 
 function commandLabel(interaction) {
-  if (!interaction?.commandName) return 'that command';
-  const sub = typeof interaction.options?.getSubcommand === 'function'
-    ? interaction.options.getSubcommand(false)
-    : null;
-  return sub ? `/${interaction.commandName} ${sub}` : `/${interaction.commandName}`;
+  if (interaction?.commandName) {
+    const sub = typeof interaction.options?.getSubcommand === 'function'
+      ? interaction.options.getSubcommand(false)
+      : null;
+    return sub ? `/${interaction.commandName} ${sub}` : `/${interaction.commandName}`;
+  }
+  if (interaction?.customId) return `button ${String(interaction.customId).slice(0, 80)}`;
+  return 'that command';
 }
 
 function safeReason(err) {

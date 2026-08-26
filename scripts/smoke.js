@@ -187,10 +187,18 @@ check('mention create vs lookup', () => {
   assert.strictEqual(wantsCreate('when is the next event'), false);
 });
 
-const { safeReason } = require('../src/services/commandFail');
+const { safeReason, commandLabel } = require('../src/services/commandFail');
 check('commandFail hides secrets in error text', () => {
   assert.strictEqual(safeReason('Could not parse date'), 'Could not parse date');
   assert.match(safeReason('password leaked'), /staff/i);
+  assert.strictEqual(commandLabel({ commandName: 'me', options: { getSubcommand: () => 'balance' } }), '/me balance');
+  assert.strictEqual(commandLabel({ customId: 'rsvp:yes:12' }), 'button rsvp:yes:12');
+});
+
+check('award SQL qualifies coins for Postgres', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'economy.js'), 'utf8');
+  assert(src.includes('economy_balances.coins + excluded.coins'));
+  assert(!src.includes('SET coins = coins + excluded.coins'));
 });
 
 const { stillOpen } = require('../src/services/raffleRun');

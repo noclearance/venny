@@ -89,7 +89,7 @@ async function award(guildId, userId, reason, amount, client) {
   const db = getDb();
   await db.prepare(`
     INSERT INTO economy_balances (guild_id, user_id, coins) VALUES (?, ?, ?)
-    ON CONFLICT(guild_id, user_id) DO UPDATE SET coins = coins + excluded.coins
+    ON CONFLICT(guild_id, user_id) DO UPDATE SET coins = economy_balances.coins + excluded.coins
   `).run(guildId, userId, n);
   await db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
   const balance = await getBalance(guildId, userId);
