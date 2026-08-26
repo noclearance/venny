@@ -7,11 +7,14 @@ const { getDb } = require('../db/database');
 const theme = require('./theme');
 const { clanRankNames } = require('./ranks');
 
-const DEFAULT_CORS = 'https://misclickerz-hub.base44.app';
+const DEFAULT_CORS = [
+  'https://misclickerz.ai.studio',
+  'https://misclickerz-hub.base44.app',
+];
 
 function corsOrigins() {
   const extra = String(process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-  return [...new Set([DEFAULT_CORS, ...extra])];
+  return [...new Set([...DEFAULT_CORS, ...extra])];
 }
 
 function allowOrigin(req) {
@@ -332,4 +335,4 @@ async function handleApi(req, res, client) {
   return false;
 }
 
-module.exports = { handleApi, preflight, syncRank, readBearer, looksLikeDiscordBotToken, apiToken };
+module.exports = { handleApi, preflight, syncRank, readBearer, looksLikeDiscordBotToken, apiToken, corsOrigins };

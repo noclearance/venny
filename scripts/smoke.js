@@ -255,6 +255,8 @@ check('sync-rank Bearer is not the Discord token', () => {
   assert.strictEqual(api.readBearer({ headers: { 'x-venny-key': 'k' } }), 'k');
   assert(api.looksLikeDiscordBotToken('NOTADISCORDTOKEN0000.XXXXX.YYYYYYYYYYYYYYYYYYYYYY'));
   assert(!api.looksLikeDiscordBotToken('mc_sync_8f3K2jR9pX'));
+  const { corsOrigins } = require('../src/services/api');
+  assert(corsOrigins().includes('https://misclickerz.ai.studio'));
   const prev = process.env.DISCORD_TOKEN;
   process.env.DISCORD_TOKEN = 'same-secret-as-discord';
   assert(api.looksLikeDiscordBotToken('same-secret-as-discord'));
