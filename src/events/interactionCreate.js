@@ -87,6 +87,17 @@ module.exports = {
     }
 
     const bingoUi = require('../services/bingoUi');
+    if (interaction.isModalSubmit() && interaction.customId === 'event_create_modal') {
+      try {
+        await require('../services/eventRun').handleCreateModal(interaction);
+      } catch (err) {
+        logFail('Event modal', err);
+        if (isGone(err)) return;
+        await require('../services/commandFail').commandFail(interaction, err);
+      }
+      return;
+    }
+
     if (interaction.isModalSubmit() && interaction.customId.startsWith('bg:')) {
       try {
         await bingoUi.handleBingoModal(interaction);
@@ -119,6 +130,10 @@ module.exports = {
         if (interaction.customId.startsWith('bg:')) {
           if (interaction.guildId) ensureGuildSettings(interaction.guildId).catch(() => {});
           await bingoUi.handleBingoComponent(interaction);
+          return;
+        }
+        if (interaction.customId.startsWith('event_create:')) {
+          await handleButton(interaction);
           return;
         }
         if (interaction.guildId) await ensureGuildSettings(interaction.guildId);

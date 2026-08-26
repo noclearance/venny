@@ -113,6 +113,14 @@ check('event datetime parses advertised and common forms', () => {
   assert.strictEqual(parseInZone('not a date', tz), null);
 });
 
+const { wantsCreate, wantsLookup } = require('../src/services/listen');
+check('mention create vs lookup', () => {
+  assert.strictEqual(wantsCreate('make an event'), true);
+  assert.strictEqual(wantsCreate('create a mass'), true);
+  assert.strictEqual(wantsLookup('when is the next event'), true);
+  assert.strictEqual(wantsCreate('when is the next event'), false);
+});
+
 const { safeReason } = require('../src/services/commandFail');
 check('commandFail hides secrets in error text', () => {
   assert.strictEqual(safeReason('Could not parse date'), 'Could not parse date');

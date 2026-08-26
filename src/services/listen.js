@@ -3,9 +3,23 @@ const wom = require('./wom');
 const theme = require('./theme');
 const sotwQueue = require('./sotwQueue');
 
-function textOf(message) {
+function stripped(message) {
   const mention = new RegExp(`<@!?${message.client.user.id}>`, 'g');
-  return (message.content || '').replace(mention, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  return (message.content || '').replace(mention, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function textOf(message) {
+  return stripped(message).toLowerCase();
+}
+
+function wantsLookup(text) {
+  return /\b(when|next|upcoming|what time|is there)\b/.test(text)
+    && !/\b(make|create|schedule|post|host|new)\b/.test(text);
+}
+
+function wantsCreate(text) {
+  return (/\b(make|create|schedule|post|host|new)\b/.test(text) && /\b(event|mass|raid)\b/.test(text))
+    || /\b(create|make) (an? )?(event|mass)\b/.test(text);
 }
 
 function looksLike(text, words) {
@@ -29,6 +43,14 @@ async function answerMention(message) {
   if (!message.mentions.has(message.client.user)) return;
 
   const asked = textOf(message);
+  const { isModerator } = require('./permissions');
+  const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+
+  if (isModerator(member) && wantsCreate(asked) && !wantsLookup(asked)) {
+    await offerCreateMass(message);
+    return;
+  }
+
   const data = await snapshot(message.guildId);
 
   if (looksLike(asked, ['sotw', 'skill of the week', 'standings', 'winning', 'who is first'])) {
@@ -110,4 +132,18 @@ async function answerMention(message) {
   });
 }
 
-module.exports = { answerMention };
+async function offerCreateMass(message) {
+  const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`event_create:${message.author.id}`)
+      .setLabel('Create mass')
+      .setStyle(ButtonStyle.Primary),
+  );
+  await message.reply({
+    content: 'Hit **Create mass** and fill title, about, and when. I will not guess missing details.',
+    components: [row],
+  });
+}
+
+module.exports = { answerMention, wantsCreate, wantsLookup };

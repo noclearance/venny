@@ -4,9 +4,7 @@ const { parseEventDate } = require('../services/timezone');
 const { commandFail } = require('../services/commandFail');
 const { isModerator } = require('../services/permissions');
 const { buildConfirmationRow } = require('../services/confirmations');
-const { buildRsvpRow, buildEventContent, getAttendance } = require('../services/rsvp');
 const { getPaginatedData, buildPagePayload } = require('../services/pagination');
-const { audit } = require('../services/audit');
 const subs = require('../services/subscriptions');
 const theme = require('../services/theme');
 const economy = require('../services/economy');
@@ -88,48 +86,25 @@ module.exports = {
       if (!parsed.date) {
         return commandFail(interaction, parsed.error);
       }
-      const eventDate = parsed.date;
-      if (eventDate < new Date()) {
-        return commandFail(
-          interaction,
-          `That time is already past (${theme.when(eventDate.toISOString())}). Server timezone is **${parsed.tz}**.`,
-        );
+      try {
+        const { createMass, afterPosted } = require('../services/eventRun');
+        const { event, payload } = await createMass({
+          client: interaction.client,
+          guildId: interaction.guildId,
+          channel,
+          userId: interaction.user.id,
+          title,
+          about: description,
+          eventDate: parsed.date,
+          recurrence,
+          category,
+        });
+        await interaction.reply(payload);
+        const reply = await interaction.fetchReply();
+        await afterPosted(interaction.client, interaction.guildId, event, reply, interaction.user.id);
+      } catch (err) {
+        return commandFail(interaction, err);
       }
-
-      const result = await db.prepare(`
-        INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(interaction.guildId, title, description, eventDate.toISOString(), channel.id, interaction.user.id, recurrence, category);
-
-      const event = {
-        id: result.lastInsertRowid,
-        title,
-        description,
-        event_time: eventDate.toISOString(),
-        channel_id: channel.id,
-        recurrence,
-        category,
-      };
-
-      await interaction.reply({
-        embeds: [buildEventContent(event, await getAttendance(event.id))],
-        components: [buildRsvpRow(event.id)],
-      });
-
-      const reply = await interaction.fetchReply();
-      await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
-      await require('../services/cards').publish(interaction.client, interaction.guildId, {
-        kind: 'event',
-        json: { title, description, source: 'staff' },
-        fields: [
-          theme.field('When', theme.when(event.event_time), true),
-          theme.field('Guild credits', economy.payNote('event_rsvp')),
-        ],
-        sourceChannelId: reply.channelId,
-        sourceMessageId: reply.id,
-        mention: await subs.buildMentionString(interaction.guildId, category),
-      });
-      await audit(interaction.client, interaction.guildId, `Event #${event.id} **${title}** created by <@${interaction.user.id}>`);
       return;
     }
 

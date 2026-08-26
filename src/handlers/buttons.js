@@ -25,6 +25,35 @@ async function handleButton(interaction) {
   if (interaction.customId.startsWith('bingo_ok:') || interaction.customId.startsWith('bingo_no:')) {
     return handleBingoReview(interaction, db);
   }
+
+  if (interaction.customId.startsWith('event_create:')) {
+    return handleEventCreateButton(interaction);
+  }
+}
+
+async function handleEventCreateButton(interaction) {
+  const { isModerator } = require('../services/permissions');
+  const ownerId = interaction.customId.split(':')[1];
+  if (ownerId && ownerId !== interaction.user.id) {
+    return interaction.reply({ content: 'That button is for the person who pinged me.', flags: 64 });
+  }
+  if (!isModerator(interaction.member)) {
+    return interaction.reply({ content: 'Mods post masses.', flags: 64 });
+  }
+  const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+  const modal = new ModalBuilder().setCustomId('event_create_modal').setTitle('Create mass');
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('title').setLabel('Short title').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100),
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('about').setLabel('What this actually is').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000).setPlaceholder('ToB, world 345, melee, bring scythe'),
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('when').setLabel('When (e.g. 2026-08-25 19:00)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80),
+    ),
+  );
+  return interaction.showModal(modal);
 }
 
 async function handleRaffleEnter(interaction, db) {
