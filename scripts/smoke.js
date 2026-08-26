@@ -40,20 +40,45 @@ for (const file of files) {
     assert(typeof mod.execute === 'function', `${file} missing execute`);
     const json = mod.data.toJSON();
     assert(json.name, `${file} missing command name`);
-    loaded.push({ file, json, staffSubs: mod.staffSubs || [], publicSubs: mod.publicSubs || [], adminSubs: mod.adminSubs || [] });
+    loaded.push({
+      file,
+      json,
+      skipRegister: Boolean(mod.skipRegister),
+      staffSubs: mod.staffSubs || [],
+      publicSubs: mod.publicSubs || [],
+      adminSubs: mod.adminSubs || [],
+    });
   });
 }
 
 check('expected command names', () => {
-  const names = loaded.map(c => c.json.name).sort();
-  const want = ['achievements', 'bingo', 'boss', 'clan', 'config', 'economy', 'event', 'export', 'goal', 'help', 'leaderboard', 'member', 'profile', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
+  const names = loaded.filter(c => !c.skipRegister).map(c => c.json.name).sort();
+  const want = ['bingo', 'boss', 'clan', 'config', 'event', 'export', 'help', 'me', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
   assert.deepStrictEqual(names, want);
+});
+
+check('lookups nested under me and clan', () => {
+  const me = loaded.find(c => c.json.name === 'me');
+  const clan = loaded.find(c => c.json.name === 'clan');
+  const meSubs = (me.json.options || []).map(o => o.name);
+  for (const name of ['link', 'unlink', 'profile', 'balance', 'goals']) {
+    assert(meSubs.includes(name), `missing /me ${name}`);
+  }
+  const clanSubs = (clan.json.options || []).map(o => o.name);
+  for (const name of ['info', 'members', 'hiscores', 'gained', 'achievements', 'credits', 'sync']) {
+    assert(clanSubs.includes(name), `missing /clan ${name}`);
+  }
+});
+
+check('vote hidden from members', () => {
+  const vote = loaded.find(c => c.json.name === 'vote');
+  assert(vote.json.default_member_permissions, 'vote missing default_member_permissions');
 });
 
 const sotw = loaded.find(c => c.json.name === 'sotw');
 check('sotw subcommands', () => {
   const subs = (sotw.json.options || []).map(o => o.name);
-  for (const name of ['start', 'standings', 'current', 'end', 'history', 'champions', 'me', 'update', 'cancel', 'queue']) {
+  for (const name of ['start', 'standings', 'current', 'end', 'history', 'champions', 'me', 'update', 'cancel', 'queue', 'prize']) {
     assert(subs.includes(name), `missing /sotw ${name}`);
   }
 });
@@ -62,10 +87,14 @@ check('raffle has end and draw', () => {
   const raffle = loaded.find(c => c.json.name === 'raffle');
   const subs = (raffle.json.options || []).map(o => o.name);
   assert(subs.includes('end') && subs.includes('draw') && subs.includes('create'));
+  const create = (raffle.json.options || []).find(o => o.name === 'create');
+  const optNames = (create.options || []).map(o => o.name);
+  assert(optNames.includes('prize'), 'raffle create missing prize');
+  assert(!optNames.includes('description'), 'raffle create still has description');
 });
 
 check('sotw staff subs', () => {
-  for (const name of ['start', 'end', 'update', 'cancel']) {
+  for (const name of ['start', 'end', 'update', 'cancel', 'prize']) {
     assert(sotw.staffSubs.includes(name), `staffSubs missing ${name}`);
   }
 });
@@ -214,6 +243,47 @@ check('joinDescription skips duplicate notes', () => {
     assert(!String(made.json.description).includes('Local SOTW is still running.'));
     assert(String(made.embed.data.description).includes('Local SOTW is still running.'));
     assert.strictEqual(made.json.source, 'fallback');
+  });
+
+  const { venny } = require('../src/services/cards');
+  const economy = require('../src/services/economy');
+  const theme = require('../src/services/theme');
+  const flavor = require('../src/services/flavor');
+
+  check('prizeLine puts loot first', () => {
+    const line = economy.prizeLine('sotw_win', 'bond');
+    assert(line.startsWith('**bond**'), line);
+    assert(line.includes('50'), line);
+    assert.strictEqual(theme.prizeField(line).name, 'Prize');
+    assert.strictEqual(theme.prizeField(line).inline, false);
+  });
+
+  check('sotw and boss start have prize option', () => {
+    const sotwStart = (sotw.json.options || []).find(o => o.name === 'start');
+    assert((sotwStart.options || []).some(o => o.name === 'prize'));
+    const boss = loaded.find(c => c.json.name === 'boss');
+    const week = (boss.json.options || []).find(o => o.name === 'week');
+    assert((week.options || []).some(o => o.name === 'prize'));
+  });
+
+  check('raffle fallback does not invent loot', () => {
+    const card = flavor.venny('raffle_start', { title: 'Clan casket' });
+    assert.strictEqual(card.source, 'venny');
+    assert(!/legendary boon|prize worthy/i.test(card.description), card.description);
+    assert.strictEqual(card.title, 'Clan casket');
+  });
+
+  check('venny card posts Prize immediately', () => {
+    const card = venny('sotw', {
+      job: 'sotw_start',
+      facts: { skill: 'agility', prize: '50m' },
+      fallbackTitle: 'agility SOTW',
+      fields: [theme.prizeField(economy.prizeLine('sotw_win', '50m'))],
+    });
+    assert.strictEqual(card.json.source, 'venny');
+    const prize = (card.embed.data.fields || []).find(f => f.name === 'Prize');
+    assert(prize, 'missing Prize field');
+    assert(prize.value.includes('50m'), prize.value);
   });
 
   if (failures.length) {

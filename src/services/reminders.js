@@ -204,17 +204,24 @@ async function finalizeSotw(client, sotw) {
       const channel = await client.channels.fetch(sotw.channel_id);
       if (channel) {
         const theme = require('./theme');
+        const economy = require('./economy');
+        const loot = economy.clipPrize(sotw.prize);
         const top = sorted.slice(0, 5);
         const board = sorted.length
           ? theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)
           : 'No XP was gained.';
-        const made = await require('./cards').make('sotw', {
+        const fields = [
+          theme.prizeField(economy.prizeLine('sotw_win', loot)),
+          winnerRsn ? theme.field('Winner', winnerRsn) : null,
+        ];
+        const made = require('./cards').venny('sotw', {
           job: 'sotw_end',
           facts: {
             skill: sotw.skill,
             winner: winnerRsn || null,
             xp: xpGained || null,
             placed: sorted.length,
+            prize: loot || null,
           },
           fallbackTitle: `${sotw.skill} SOTW — results`,
           fallbackDescription: theme.line('sotwEnded', sotw.id),
@@ -223,14 +230,17 @@ async function finalizeSotw(client, sotw) {
           url: sotw.wom_competition_id
             ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`
             : undefined,
+          fields,
         });
         const posted = await channel.send({
           embeds: [made.embed],
         });
-        await require('./cards').publish(client, sotw.guild_id, {
+        const cards = require('./cards');
+        cards.flavorLater(posted, made.flavor);
+        await cards.publish(client, sotw.guild_id, {
           kind: 'sotw',
           json: made.json,
-          fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
+          fields,
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });
@@ -263,7 +273,7 @@ function pollDays(poll) {
   return Number(poll.duration_days || poll.sotw_duration || 7);
 }
 
-async function publishAutoStart(client, channel, poll, winner, results, { label, liveLine, kind, pay, started, extraLines = [] }) {
+async function publishAutoStart(client, channel, poll, winner, results, { label, liveLine, kind, started, extraLines = [] }) {
   if (!started.success) {
     await channel.send(`${results}\n\nFailed to auto-start ${label}: ${started.error}`);
     return true;
@@ -271,13 +281,14 @@ async function publishAutoStart(client, channel, poll, winner, results, { label,
   const posted = await channel.send(started.embed
     ? { content: `${results}\n\n**${winner}** won. ${liveLine}`, embeds: [started.embed] }
     : { content: `${results}\n\n${started.response}` });
+  const cards = require('./cards');
+  if (started.flavor) cards.flavorLater(posted, started.flavor);
   if (started.card) {
-    const theme = require('./theme');
-    await require('./cards').publish(client, poll.guild_id, {
+    await cards.publish(client, poll.guild_id, {
       kind,
       json: started.card,
       extraLines,
-      fields: [theme.field('Guild credits', require('./economy').payNote(pay))],
+      fields: started.flavor?.fields,
       sourceChannelId: posted.channelId,
       sourceMessageId: posted.id,
     });
@@ -303,7 +314,6 @@ async function autoStartFromPoll(client, channel, poll, winner, results) {
       label: 'SOTW',
       liveLine: 'Week is live.',
       kind: 'sotw',
-      pay: 'sotw_win',
       started,
       extraLines: started.tracking ? [started.tracking] : [],
     });
@@ -322,7 +332,6 @@ async function autoStartFromPoll(client, channel, poll, winner, results) {
       label: 'BOTW',
       liveLine: 'Hunt is live.',
       kind: 'danger',
-      pay: 'botw_win',
       started,
     });
   }

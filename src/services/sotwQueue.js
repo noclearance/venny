@@ -61,15 +61,17 @@ async function startNextQueuedSotw(guildId, client) {
           ? { content: 'Pulled the next skill from the queue.', embeds: [result.embed] }
           : { content: `Auto-started from queue:\n\n${result.response}` });
         const theme = require('./theme');
+        const cards = require('./cards');
+        if (result.flavor) cards.flavorLater(posted, result.flavor);
         const card = result.card || {
           title: `${next.skill} SOTW`,
           description: theme.line('sotwOpen', next.skill),
         };
-        await require('./cards').publish(client, guildId, {
+        await cards.publish(client, guildId, {
           kind: 'sotw',
           json: card,
           extraLines: [result.tracking],
-          fields: [theme.field('Guild credits', require('./economy').payNote('sotw_win'))],
+          fields: result.flavor?.fields,
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });

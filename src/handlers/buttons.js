@@ -69,7 +69,7 @@ async function handleRaffleEnter(interaction, db) {
 
   const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
   if (!member) {
-    return interaction.editReply({ content: 'Link your RSN first: `/member link`.' });
+    return interaction.editReply({ content: 'Link your RSN first: `/me link`.' });
   }
 
   try {

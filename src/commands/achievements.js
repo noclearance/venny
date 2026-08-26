@@ -3,6 +3,7 @@ const theme = require('../services/theme');
 const tracker = require('../services/achievements');
 
 module.exports = {
+  skipRegister: true,
   data: new SlashCommandBuilder()
     .setName('achievements')
     .setDescription('Recent 99s, KC milestones, clog, and capes')

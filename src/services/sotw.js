@@ -132,7 +132,7 @@ function trackingLine(sotw, linked) {
   return 'Not linked to WOM yet. Set group + verification with `/config`.';
 }
 
-async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 7, title = null }) {
+async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 7, title = null, prize = null }) {
   const db = getDb();
   const active = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0').get(guildId);
   if (active) {
@@ -140,13 +140,14 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   }
 
   const finalTitle = String(title || `SOTW ${String(skill || '').toUpperCase()}`).trim().slice(0, 50);
+  const loot = require('./economy').clipPrize(prize);
   const startsAt = new Date().toISOString();
   const endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
   const result = await db.prepare(`
-    INSERT INTO sotw (guild_id, skill, starts_at, ends_at, wom_competition_id, channel_id, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(guildId, skill, startsAt, endsAt, null, channelId, createdBy);
+    INSERT INTO sotw (guild_id, skill, starts_at, ends_at, wom_competition_id, channel_id, created_by, prize)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(guildId, skill, startsAt, endsAt, null, channelId, createdBy, loot || null);
 
   const inserted = {
     id: result.lastInsertRowid,
@@ -157,6 +158,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     wom_competition_id: null,
     channel_id: channelId,
     created_by: createdBy,
+    prize: loot || null,
   };
   const linked = await ensureWomWeek(inserted, { title: finalTitle });
   const sotw = linked.sotw;
@@ -166,16 +168,18 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   const theme = require('./theme');
   const economy = require('./economy');
   const windowDays = Math.max(1, Math.round((new Date(sotw.ends_at) - new Date(sotw.starts_at)) / 86400000)) || durationDays;
-  const made = await require('./cards').make('sotw', {
+  const made = require('./cards').venny('sotw', {
     job: 'sotw_start',
-    facts: { skill: sotw.skill, days: windowDays, wom: Boolean(sotw.wom_competition_id) },
+    facts: { skill: sotw.skill, days: windowDays, wom: Boolean(sotw.wom_competition_id), prize: loot || null },
+    fallbackTitle: `${sotw.skill} SOTW`,
+    fallbackDescription: theme.line('sotwOpen', sotw.id),
     extraLines: [tracking],
     thumbnail: theme.skillIconUrl(sotw.skill),
     url: sotw.wom_competition_id ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}` : undefined,
     fields: [
+      theme.prizeField(economy.prizeLine('sotw_win', loot)),
       theme.field('Ends', `<t:${endTs}:R>`, true),
       theme.field('ID', `#${sotw.id}`, true),
-      theme.field('Guild credits', economy.payNote('sotw_win')),
     ],
   });
 
@@ -192,6 +196,7 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
     sotwId: sotw.id,
     womCompetitionId: sotw.wom_competition_id,
     card: made.json,
+    flavor: made.flavor,
     tracking,
   };
 }

@@ -4,6 +4,7 @@ const wom = require('../services/wom');
 const { SKILL_CHOICES } = wom;
 
 module.exports = {
+  skipRegister: true,
   data: new SlashCommandBuilder()
     .setName('leaderboard')
     .setDescription('View clan leaderboards via Wise Old Man')

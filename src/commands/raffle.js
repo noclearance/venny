@@ -28,7 +28,11 @@ module.exports = {
             .setRequired(true)
             .setMinValue(1)
             .setMaxValue(720))
-        .addStringOption(opt => opt.setName('description').setDescription('What are you raffling?').setRequired(false))
+        .addStringOption(opt =>
+          opt.setName('prize')
+            .setDescription('What they win — 50m, Twisted Bow')
+            .setRequired(false)
+            .setMaxLength(200))
         .addStringOption(opt =>
           opt.setName('until')
             .setDescription('Optional exact close time (overrides hours), e.g. 2026-08-24 19:00'))
@@ -77,7 +81,9 @@ module.exports = {
 
     if (sub === 'create') {
       const title = interaction.options.getString('title');
-      const description = interaction.options.getString('description') || 'Click the button below to enter!';
+      const economy = require('../services/economy');
+      const loot = economy.clipPrize(interaction.options.getString('prize'));
+      const description = loot || '';
       const weightMode = interaction.options.getString('weight_mode') || 'none';
       const ticketGp = interaction.options.getInteger('ticket_gp') ?? DEFAULT_TICKET_GP;
       const hours = interaction.options.getInteger('hours');
@@ -118,23 +124,18 @@ module.exports = {
       );
 
       const theme = require('../services/theme');
-      const economy = require('../services/economy');
-      const prize = description !== 'Click the button below to enter!' ? description : '';
       const ticket = ticketGp > 0 ? `${ticketGp.toLocaleString()} GP` : 'Free';
-      const how = prize
-        ? 'Pay staff in game, `/member link` your RSN, then tap **Enter Raffle**.'
-        : ticketLine(ticketGp);
+      const how = ticketLine(ticketGp);
       const fields = [
-        prize ? theme.field('Prize', prize) : null,
+        theme.prizeField(economy.prizeLine('raffle_win', loot)),
         theme.field('Ticket', ticket, true),
         theme.field('Closes', theme.when(endsIso), true),
         theme.field('Odds', weightMode !== 'none' ? `Weighted by ${weightMode}` : 'Equal', true),
         theme.field('How to enter', how),
-        theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
       ];
-      const made = await require('../services/cards').make('raffle', {
+      const made = require('../services/cards').venny('raffle', {
         job: 'raffle_start',
-        facts: { title, prize: prize || null, weighted: weightMode !== 'none', hours },
+        facts: { title, prize: loot || null, weighted: weightMode !== 'none', hours },
         fallbackTitle: title,
         fallbackDescription: theme.line('raffleOpen', raffleId),
         fields,
@@ -146,14 +147,15 @@ module.exports = {
         components: [row],
         fetchReply: true,
       });
-      await require('../services/cards').publish(interaction.client, interaction.guildId, {
+      const cards = require('../services/cards');
+      cards.flavorLater(reply, made.flavor);
+      await cards.publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
         json: made.json,
         fields: [
-          prize ? theme.field('Prize', prize) : null,
+          theme.prizeField(economy.prizeLine('raffle_win', loot)),
           theme.field('Ticket', ticketGp > 0 ? `${ticket} each` : 'Free', true),
           theme.field('Closes', theme.when(endsIso), true),
-          theme.field('Guild credits', economy.payNote('raffle_enter', 'raffle_win')),
         ],
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,

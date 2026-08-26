@@ -5,6 +5,7 @@ const wom = require('../services/wom');
 const goals = require('../services/goals');
 
 module.exports = {
+  skipRegister: true,
   data: new SlashCommandBuilder()
     .setName('goal')
     .setDescription('XP and level goals — I ping you when WOM sees it')
@@ -30,7 +31,7 @@ module.exports = {
     const db = getDb();
     const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
     if (!member && sub !== 'list') {
-      return interaction.reply({ content: 'Link an RSN first: `/member link`.', flags: 64 });
+      return interaction.reply({ content: 'Link an RSN first: `/me link`.', flags: 64 });
     }
 
     if (sub === 'xp') {

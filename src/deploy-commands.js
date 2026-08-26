@@ -13,6 +13,7 @@ function loadCommandModules() {
 function payloadsForSettings(settings = {}) {
   const commands = [];
   for (const command of loadCommandModules()) {
+    if (command.skipRegister) continue;
     if (command.buildData) {
       commands.push(command.buildData(settings).toJSON());
     } else if (command.data) {

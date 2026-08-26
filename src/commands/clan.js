@@ -8,10 +8,58 @@ const { audit } = require('../services/audit');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('clan')
-    .setDescription('Clan dashboard and info')
+    .setDescription('Dashboard, hiscores, members, achievements')
     .addSubcommand(sub =>
       sub.setName('info')
       .setDescription('Show a dashboard of SOTW, BOTW, events, raffles, and polls'))
+    .addSubcommand(sub =>
+      sub.setName('members')
+        .setDescription('Linked RSNs in this server'))
+    .addSubcommand(sub =>
+      sub.setName('whois')
+        .setDescription('Look up a member’s RSN')
+        .addUserOption(opt =>
+          opt.setName('user')
+            .setDescription('Discord user to look up')
+            .setRequired(true)))
+    .addSubcommand(sub =>
+      sub.setName('hiscores')
+        .setDescription('Top clan members by current XP in a skill')
+        .addStringOption(opt =>
+          opt.setName('skill')
+            .setDescription('Skill to show')
+            .setRequired(true)
+            .addChoices(...wom.SKILL_CHOICES))
+        .addIntegerOption(opt => opt.setName('limit').setDescription('Number of results (default: 10, max: 50)').setRequired(false).setMinValue(1).setMaxValue(50)))
+    .addSubcommand(sub =>
+      sub.setName('gained')
+        .setDescription('Top clan members by XP gained')
+        .addStringOption(opt =>
+          opt.setName('skill')
+            .setDescription('Skill to show')
+            .setRequired(true)
+            .addChoices(...wom.SKILL_CHOICES))
+        .addStringOption(opt =>
+          opt.setName('period')
+            .setDescription('Time period')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Day', value: 'day' },
+              { name: 'Week', value: 'week' },
+              { name: 'Month', value: 'month' },
+              { name: 'Year', value: 'year' },
+            )))
+    .addSubcommand(sub =>
+      sub.setName('player')
+        .setDescription('Look up a player’s stats')
+        .addStringOption(opt => opt.setName('rsn').setDescription('RSN to look up').setRequired(true)))
+    .addSubcommand(sub =>
+      sub.setName('achievements')
+        .setDescription('Recent 99s, KC milestones, clog, and capes')
+        .addUserOption(opt => opt.setName('user').setDescription('Filter to one person')))
+    .addSubcommand(sub =>
+      sub.setName('credits')
+        .setDescription('Richest linked members (guild credits)'))
     .addSubcommand(sub =>
       sub.setName('sync')
         .setDescription('Sync clan members from Wise Old Man (admin only)')),
@@ -19,6 +67,22 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = getDb();
+
+    if (sub === 'members') {
+      return require('./member').run(interaction, 'list');
+    }
+    if (sub === 'whois') {
+      return require('./member').run(interaction, 'whois');
+    }
+    if (sub === 'hiscores' || sub === 'gained' || sub === 'player') {
+      return require('./leaderboard').execute(interaction);
+    }
+    if (sub === 'achievements') {
+      return require('./achievements').execute(interaction);
+    }
+    if (sub === 'credits') {
+      return require('./economy').run(interaction, 'leaderboard');
+    }
 
     if (sub === 'info') {
       await interaction.deferReply({ flags: 64 });
@@ -153,7 +217,7 @@ module.exports = {
         response += `❌ Unlinked: **${unlinked.length}**\n\n`;
 
         if (unlinked.length > 0) {
-          response += `Unlinked RSNs (ask them to run \`/member link\`):\n`;
+          response += `Unlinked RSNs (ask them to run \`/me link\`):\n`;
           response += unlinked.slice(0, 20).map(r => `• ${r}`).join('\n');
           if (unlinked.length > 20) {
             response += `\n*...and ${unlinked.length - 20} more*`;

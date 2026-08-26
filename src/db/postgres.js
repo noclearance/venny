@@ -370,6 +370,8 @@ async function initPostgres(db) {
   await migrateColumn(db, 'raffles', 'ends_at', 'TEXT');
   await migrateColumn(db, 'polls', 'duration_days', 'INTEGER');
   await db.exec('UPDATE polls SET duration_days = sotw_duration WHERE duration_days IS NULL');
+  await migrateColumn(db, 'sotw', 'prize', 'TEXT');
+  await migrateColumn(db, 'botw', 'prize', 'TEXT');
 }
 
 module.exports = { wrapPg, initPostgres, getPool };

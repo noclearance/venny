@@ -69,7 +69,10 @@ function buildData(settings = {}) {
           { name: 'Skilling', value: 'skilling' },
           { name: 'Social', value: 'social' },
         ))
-        .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)));
+        .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)))
+    .addSubcommand(sub =>
+      sub.setName('ranks')
+        .setDescription('Create Trial/Member/Veteran/Officer/Admin and check Venny sits above them'));
 
   for (const slot of missingChannelSlots(settings)) {
     cmd.addSubcommand(sub =>
@@ -179,6 +182,24 @@ module.exports = {
       await db.prepare('UPDATE guild_settings SET timezone = ? WHERE guild_id = ?').run(tz, interaction.guildId);
       await interaction.reply({ content: `Server timezone set to **${tz}**. Event times will now be parsed in this timezone.`, flags: 64 });
       await audit(interaction.client, interaction.guildId, `Timezone set to ${tz} by <@${interaction.user.id}>`);
+      return;
+    }
+
+    if (sub === 'ranks') {
+      const ranks = require('../services/ranks');
+      const report = await ranks.ensure(interaction.guild);
+      const theme = require('../services/theme');
+      await interaction.reply({
+        embeds: [theme.embed('info', {
+          title: 'Clan ranks',
+          description: [
+            ranks.formatReport(report),
+            'Hub still assigns the rank (`POST /api/sync-rank` with `{ discord_id, rank }`). I only put the Discord role on.',
+          ].join('\n\n'),
+        })],
+        flags: 64,
+      });
+      await audit(interaction.client, interaction.guildId, `Clan ranks checked by <@${interaction.user.id}>`);
       return;
     }
 

@@ -48,7 +48,7 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
     }
     const result = await bingo.checkWomTile(card, tile, interaction.user.id);
     if (result.reason === 'need_rsn') {
-      return interaction.editReply({ content: 'Link your RSN first: `/member link`.' });
+      return interaction.editReply({ content: 'Link your RSN first: `/me link`.' });
     }
     if (result.reason === 'wom_fail') {
       return interaction.editReply({ content: 'Wise Old Man did not answer. Try again in a minute.' });

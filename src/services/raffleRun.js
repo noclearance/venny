@@ -1,5 +1,13 @@
 const { getDb } = require('../db/database');
 
+const PLACEHOLDER = 'Click the button below to enter!';
+
+function lootOf(raffle) {
+  const d = String(raffle?.description || '').trim();
+  if (!d || d === PLACEHOLDER) return '';
+  return d.slice(0, 200);
+}
+
 async function pickWinner(raffle, entries) {
   const db = getDb();
   if (!entries.length) return { winner: null, weightInfo: '' };
@@ -61,27 +69,25 @@ async function pickWinner(raffle, entries) {
 
 async function postResult(client, raffle, { winner, entries, weightInfo, outcome }) {
   const theme = require('./theme');
-  const prize = raffle.description && raffle.description !== 'Click the button below to enter!'
-    ? raffle.description
-    : null;
+  const economy = require('./economy');
+  const loot = lootOf(raffle);
   const closed = outcome === 'empty' || outcome === 'close';
-  const made = await require('./cards').make('raffle', {
+  const fields = [
+    theme.prizeField(economy.prizeLine('raffle_win', loot)),
+    winner ? theme.field('Winner', `<@${winner.user_id}>`) : null,
+    theme.field('Entries', String(entries.length), true),
+    !closed && weightInfo ? theme.field('Odds', weightInfo) : null,
+  ];
+  const made = require('./cards').venny('raffle', {
     job: closed ? 'raffle_end' : 'raffle_win',
-    facts: { title: raffle.title, prize, entries: entries.length, auto: true },
+    facts: { title: raffle.title, prize: loot || null, entries: entries.length, auto: true },
     fallbackTitle: closed ? `${raffle.title} — closed` : `${raffle.title} — drawn`,
     fallbackDescription: outcome === 'close'
       ? 'No winner. The Enter button is dead.'
       : outcome === 'empty'
         ? 'Time is up. Nobody entered.'
         : theme.line('raffleWon', raffle.id),
-    fields: closed
-      ? [theme.field('Entries', String(entries.length), true)]
-      : [
-          theme.field('Winner', `<@${winner.user_id}>`, true),
-          theme.field('Entries', String(entries.length), true),
-          prize ? theme.field('Prize', prize) : null,
-          weightInfo ? theme.field('Odds', weightInfo) : null,
-        ],
+    fields,
     footer: `Raffle #${raffle.id}  ·  Misclickers`,
     timestamp: true,
   });
@@ -98,15 +104,17 @@ async function postResult(client, raffle, { winner, entries, weightInfo, outcome
     console.warn(`Raffle #${raffle.id} post failed: ${err.message}`);
   }
 
-  await require('./cards').publish(client, raffle.guild_id, {
+  const cards = require('./cards');
+  if (posted) cards.flavorLater(posted, made.flavor);
+  await cards.publish(client, raffle.guild_id, {
     kind: 'raffle',
     json: made.json,
     fields: winner
       ? [
+          theme.prizeField(economy.prizeLine('raffle_win', loot)),
           theme.field('Winner', `<@${winner.user_id}>`),
-          theme.field('Guild credits', require('./economy').payNote('raffle_win')),
         ]
-      : null,
+      : [theme.prizeField(economy.prizeLine('raffle_win', loot))],
     sourceChannelId: posted?.channelId,
     sourceMessageId: posted?.id,
     mention: winner ? `<@${winner.user_id}>` : undefined,
@@ -172,4 +180,4 @@ function stillOpen(raffle) {
   return new Date(raffle.ends_at).getTime() > Date.now();
 }
 
-module.exports = { pickWinner, settle, expireDue, stillOpen };
+module.exports = { pickWinner, settle, expireDue, stillOpen, lootOf, PLACEHOLDER };

@@ -40,7 +40,7 @@ async function huntRows(settings, botw) {
   return parseKcRows(gained);
 }
 
-async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7 }) {
+async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7, prize = null }) {
   const db = getDb();
   const key = String(boss || '').toLowerCase().replace(/\s+/g, '_');
   if (!BOSSES.includes(key)) {
@@ -55,27 +55,30 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
     };
   }
 
+  const loot = require('./economy').clipPrize(prize);
   const startsAt = new Date().toISOString();
   const endsAt = new Date(Date.now() + durationDays * 86400000).toISOString();
   const result = await db.prepare(`
-    INSERT INTO botw (guild_id, boss, starts_at, ends_at, channel_id, created_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(guildId, key, startsAt, endsAt, channelId, createdBy);
+    INSERT INTO botw (guild_id, boss, starts_at, ends_at, channel_id, created_by, prize)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(guildId, key, startsAt, endsAt, channelId, createdBy, loot || null);
 
   const theme = require('./theme');
   const economy = require('./economy');
-  const made = await require('./cards').make('danger', {
+  const made = require('./cards').venny('danger', {
     job: 'botw_start',
-    facts: { boss: prettyMetric(key), days: durationDays },
+    facts: { boss: prettyMetric(key), days: durationDays, prize: loot || null },
+    fallbackTitle: `BOTW · ${prettyMetric(key)}`,
+    fallbackDescription: 'KC from this second counts.',
     extraLines: [
       `KC from this second until ${theme.when(endsAt)} counts on Wise Old Man group gained.`,
       `Board: \`/boss kc\` or \`/boss week\` with no boss name.`,
     ],
     thumbnail: theme.skillIconUrl('slayer'),
     fields: [
+      theme.prizeField(economy.prizeLine('botw_win', loot)),
       theme.field('Boss', prettyMetric(key), true),
       theme.field('Ends', theme.when(endsAt), true),
-      theme.field('Guild credits', economy.payNote('botw_win')),
     ],
     timestamp: true,
   });
@@ -84,6 +87,7 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
     success: true,
     embed: made.embed,
     card: made.json,
+    flavor: made.flavor,
     botwId: result.lastInsertRowid,
     boss: key,
     endsAt,
@@ -115,19 +119,30 @@ async function finalizeBotw(client, botw) {
     ? formatBoard(rows)
     : 'Set a WOM group to see KC.';
   const theme = require('./theme');
-  const made = await require('./cards').make('danger', {
+  const economy = require('./economy');
+  const loot = economy.clipPrize(botw.prize);
+  const fields = [
+    theme.prizeField(economy.prizeLine('botw_win', loot)),
+    winnerRsn ? theme.field('Winner', winnerRsn) : null,
+  ];
+  const made = require('./cards').venny('danger', {
     job: 'botw_end',
-    facts: { boss: prettyMetric(botw.boss), winner: winnerRsn },
+    facts: { boss: prettyMetric(botw.boss), winner: winnerRsn, prize: loot || null },
+    fallbackTitle: `BOTW · ${prettyMetric(botw.boss)} — results`,
+    fallbackDescription: 'Hunt is closed. Board below is final.',
     extraLines: [board],
     thumbnail: theme.skillIconUrl('slayer'),
+    fields,
   });
 
   const channel = await client.channels.fetch(botw.channel_id);
   const posted = await channel.send({ embeds: [made.embed] });
-  await require('./cards').publish(client, botw.guild_id, {
+  const cards = require('./cards');
+  cards.flavorLater(posted, made.flavor);
+  await cards.publish(client, botw.guild_id, {
     kind: 'danger',
     json: made.json,
-    fields: [theme.field('Guild credits', require('./economy').payNote('botw_win'))],
+    fields,
     sourceChannelId: posted.channelId,
     sourceMessageId: posted.id,
   });

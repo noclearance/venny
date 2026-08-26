@@ -9,25 +9,18 @@ function joinDescription(json, extraLines = []) {
   return [body, ...extras].filter(Boolean).join('\n\n');
 }
 
-async function make(kind, {
-  job,
-  facts = {},
-  fallbackTitle,
-  fallbackDescription,
+function pack(kind, json, {
   fields,
   thumbnail,
   url,
   footer,
   timestamp,
   extraLines = [],
+  job,
+  facts,
+  fallbackTitle,
+  fallbackDescription,
 } = {}) {
-  const json = job
-    ? await flavor.announce(job, facts, { fallbackTitle, fallbackDescription })
-    : {
-        title: fallbackTitle || '',
-        description: fallbackDescription || '',
-        source: 'none',
-      };
   return {
     json,
     embed: theme.fromJson(kind, { ...json, description: joinDescription(json, extraLines) }, {
@@ -37,7 +30,73 @@ async function make(kind, {
       footer,
       timestamp,
     }),
+    flavor: {
+      kind,
+      job,
+      facts,
+      fallbackTitle,
+      fallbackDescription,
+      fields,
+      thumbnail,
+      url,
+      footer,
+      timestamp,
+      extraLines,
+    },
   };
+}
+
+function venny(kind, opts = {}) {
+  const json = opts.job
+    ? flavor.venny(opts.job, opts.facts || {}, {
+        fallbackTitle: opts.fallbackTitle,
+        fallbackDescription: opts.fallbackDescription,
+      })
+    : {
+        title: opts.fallbackTitle || '',
+        description: opts.fallbackDescription || '',
+        source: 'venny',
+      };
+  return pack(kind, json, opts);
+}
+
+async function make(kind, opts = {}) {
+  const json = opts.job
+    ? await flavor.announce(opts.job, opts.facts || {}, {
+        fallbackTitle: opts.fallbackTitle,
+        fallbackDescription: opts.fallbackDescription,
+      })
+    : {
+        title: opts.fallbackTitle || '',
+        description: opts.fallbackDescription || '',
+        source: 'none',
+      };
+  return pack(kind, json, opts);
+}
+
+async function flavorLater(message, spec) {
+  if (!message || typeof message.edit !== 'function' || !spec?.kind || !spec?.job) return;
+  try {
+    const json = await flavor.announce(spec.job, spec.facts || {}, {
+      fallbackTitle: spec.fallbackTitle,
+      fallbackDescription: spec.fallbackDescription,
+    });
+    if (json.source !== 'openai') return;
+    await message.edit({
+      embeds: [theme.fromJson(spec.kind, {
+        ...json,
+        description: joinDescription(json, spec.extraLines || []),
+      }, {
+        fields: spec.fields,
+        thumbnail: spec.thumbnail,
+        url: spec.url,
+        footer: spec.footer,
+        timestamp: spec.timestamp,
+      })],
+    });
+  } catch (err) {
+    console.warn(`flavor edit: ${err.message}`);
+  }
 }
 
 async function publish(client, guildId, {
@@ -76,4 +135,4 @@ async function publish(client, guildId, {
   return posted;
 }
 
-module.exports = { make, publish, joinDescription };
+module.exports = { make, venny, flavorLater, publish, joinDescription };

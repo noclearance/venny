@@ -28,8 +28,13 @@ module.exports = {
       sub.setName('list')
         .setDescription('List all linked members in this server')),
 
+  skipRegister: true,
+
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
+    return this.run(interaction, interaction.options.getSubcommand());
+  },
+
+  async run(interaction, sub) {
     const db = getDb();
 
     if (sub === 'link') {
@@ -119,7 +124,7 @@ module.exports = {
     if (sub === 'list') {
       const data = await getPaginatedData('members', interaction.guildId, 0);
       if (!data || data.total === 0) {
-        await interaction.reply({ content: 'No members have linked their RSN yet. Use `/member link` to get started.', flags: 64 });
+        await interaction.reply({ content: 'No members have linked their RSN yet. Use `/me link` to get started.', flags: 64 });
         return;
       }
       await interaction.reply(buildPagePayload('members', data, 0, interaction.guildId));

@@ -30,7 +30,11 @@ module.exports = {
       sub.setName('week')
         .setDescription('Start or show Boss of the Week (WOM KC, not /event)')
         .addStringOption(opt => opt.setName('boss').setDescription('Boss to start').addChoices(...BOSS_CHOICES))
-        .addIntegerOption(opt => opt.setName('days').setDescription('How many days the hunt lasts').setMinValue(1).setMaxValue(30)))
+        .addIntegerOption(opt => opt.setName('days').setDescription('How many days the hunt lasts').setMinValue(1).setMaxValue(30))
+        .addStringOption(opt =>
+          opt.setName('prize')
+            .setDescription('In-game loot for first place, e.g. bond or 50m')
+            .setMaxLength(200)))
     .addSubcommand(sub =>
       sub.setName('end')
         .setDescription('End the live hunt now and pay first place')),
@@ -63,14 +67,18 @@ module.exports = {
           createdBy: interaction.user.id,
           boss,
           durationDays: days,
+          prize: interaction.options.getString('prize'),
         });
         if (!result.success) {
           return interaction.reply({ content: result.error, flags: 64 });
         }
         const posted = await interaction.reply({ embeds: [result.embed], fetchReply: true });
-        await require('../services/cards').publish(interaction.client, interaction.guildId, {
+        const cards = require('../services/cards');
+        cards.flavorLater(posted, result.flavor);
+        await cards.publish(interaction.client, interaction.guildId, {
           kind: 'danger',
           json: result.card,
+          fields: result.flavor?.fields,
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });
@@ -79,6 +87,7 @@ module.exports = {
       const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
       if (!current) return interaction.reply({ content: 'No BOTW running. A mod can `/boss week boss:` after `/vote botw`, or start one here.', flags: 64 });
       const board = await botw.kcBoard(settings, current);
+      const economy = require('../services/economy');
       return interaction.reply({
         flags: 64,
         embeds: [theme.embed('danger', {
@@ -89,6 +98,7 @@ module.exports = {
             'This is Wise Old Man KC for the hunt window — not a `/event` mass.',
           ].join('\n\n'),
           thumbnail: theme.skillIconUrl('slayer'),
+          fields: [theme.prizeField(economy.prizeLine('botw_win', current.prize))],
         })],
       });
     }

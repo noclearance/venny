@@ -3,6 +3,7 @@ const { getDb } = require('../db/database');
 const { buildProfile } = require('../services/profile');
 
 module.exports = {
+  skipRegister: true,
   data: new SlashCommandBuilder()
     .setName('profile')
     .setDescription('Rich OSRS profile card for a linked member')
@@ -16,7 +17,7 @@ module.exports = {
     const db = getDb();
     const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, target.id);
     if (!member) {
-      return interaction.reply({ content: `${target} has no linked RSN. \`/member link\` first.`, flags: 64 });
+      return interaction.reply({ content: `${target} has no linked RSN. \`/me link\` first.`, flags: 64 });
     }
 
     await interaction.deferReply({ flags: 64 });

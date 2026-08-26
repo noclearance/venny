@@ -28,7 +28,12 @@ module.exports = {
         .addStringOption(opt =>
           opt.setName('title')
             .setDescription('Custom competition title (default: SOTW: <skill>)')
-            .setRequired(false)))
+            .setRequired(false))
+        .addStringOption(opt =>
+          opt.setName('prize')
+            .setDescription('In-game loot for first place, e.g. bond or 50m')
+            .setRequired(false)
+            .setMaxLength(200)))
     .addSubcommand(sub =>
       sub.setName('standings')
         .setDescription('Show current SOTW standings')
@@ -55,6 +60,14 @@ module.exports = {
     .addSubcommand(sub =>
       sub.setName('me')
         .setDescription('Show your personal progress in the current SOTW'))
+    .addSubcommand(sub =>
+      sub.setName('prize')
+        .setDescription('Set the winning prize on the live week — does not restart')
+        .addStringOption(opt =>
+          opt.setName('prize')
+            .setDescription('What first place wins, e.g. bond or 50m')
+            .setRequired(true)
+            .setMaxLength(200)))
     .addSubcommand(sub =>
       sub.setName('update')
         .setDescription('Refresh Wise Old Man hiscores for the current SOTW (does not start a new one)'))
@@ -88,6 +101,7 @@ module.exports = {
       const skill = interaction.options.getString('skill');
       const durationDays = interaction.options.getInteger('duration_days') || 7;
       const title = interaction.options.getString('title') || null;
+      const prize = interaction.options.getString('prize') || null;
 
       await interaction.deferReply();
 
@@ -99,6 +113,7 @@ module.exports = {
         skill,
         durationDays,
         title,
+        prize,
       });
 
       if (!result.success) {
@@ -107,14 +122,13 @@ module.exports = {
 
       await interaction.editReply(result.embed ? { embeds: [result.embed] } : result.response);
       const posted = await interaction.fetchReply();
-      const theme = require('../services/theme');
-      await require('../services/cards').publish(interaction.client, interaction.guildId, {
+      const cards = require('../services/cards');
+      cards.flavorLater(posted, result.flavor);
+      await cards.publish(interaction.client, interaction.guildId, {
         kind: 'sotw',
         json: result.card,
         extraLines: [result.tracking],
-        fields: [
-          theme.field('Guild credits', require('../services/economy').payNote('sotw_win')),
-        ],
+        fields: result.flavor?.fields,
         sourceChannelId: posted.channelId,
         sourceMessageId: posted.id,
       });
@@ -129,6 +143,7 @@ module.exports = {
         return interaction.reply({ content: 'No SOTW running. A mod can `/sotw start`.', flags: 64 });
       }
       const theme = require('../services/theme');
+      const economy = require('../services/economy');
       const status = require('../services/sotw').statusOf(sotw);
       const womLine = status === 'wom'
         ? `Tracked on [Wise Old Man](https://wiseoldman.net/competitions/${sotw.wom_competition_id}). \`/sotw standings\` for the board.`
@@ -139,6 +154,7 @@ module.exports = {
           description: [theme.line('sotwOpen', sotw.id), theme.when(sotw.ends_at), womLine, `ID #${sotw.id}`].join('\n\n'),
           thumbnail: theme.skillIconUrl(sotw.skill),
           url: sotw.wom_competition_id ? `https://wiseoldman.net/competitions/${sotw.wom_competition_id}` : undefined,
+          fields: [theme.prizeField(economy.prizeLine('sotw_win', sotw.prize))],
         })],
         flags: 64,
       });
@@ -199,6 +215,32 @@ module.exports = {
       } catch (err) {
         await interaction.editReply(`❌ Failed to fetch standings: ${err.message}`);
       }
+      return;
+    }
+
+    // ── Prize (live week) ─────────────────────
+    if (sub === 'prize') {
+      const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+      if (!sotw) {
+        return require('../services/commandFail').commandFail(interaction, 'No SOTW is live. Do not start a new one just to add a prize — `/sotw start` when the next week begins.');
+      }
+      const economy = require('../services/economy');
+      const loot = economy.clipPrize(interaction.options.getString('prize'));
+      if (!loot) {
+        return require('../services/commandFail').commandFail(interaction, 'Tell me the actual loot (bond, 50m). I will not invent it.');
+      }
+      await db.prepare('UPDATE sotw SET prize = ? WHERE id = ?').run(loot, sotw.id);
+      const theme = require('../services/theme');
+      const line = economy.prizeLine('sotw_win', loot);
+      await interaction.reply({
+        embeds: [theme.embed('sotw', {
+          title: `${sotw.skill} SOTW — prize`,
+          description: 'This week is still live. First place when it ends. XP on Wise Old Man is unchanged.',
+          thumbnail: theme.skillIconUrl(sotw.skill),
+          fields: [theme.prizeField(line)],
+        })],
+      });
+      await audit(interaction.client, interaction.guildId, `SOTW #${sotw.id} **${sotw.skill}** prize set to **${loot}** by <@${interaction.user.id}>`);
       return;
     }
 
@@ -280,7 +322,7 @@ module.exports = {
       const member = await db.prepare('SELECT * FROM members WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, interaction.user.id);
 
       if (!member) {
-        return interaction.reply({ content: '❌ You need to link your RSN first! Use `/member link rsn:<your_name>`.', flags: 64 });
+        return interaction.reply({ content: '❌ You need to link your RSN first! Use `/me link rsn:<your_name>`.', flags: 64 });
       }
 
       const sotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
@@ -480,6 +522,6 @@ module.exports = {
       }
     }
   },
-  staffSubs: ['start', 'end', 'update', 'cancel'],
-  publicSubs: ['start', 'cancel'],
+  staffSubs: ['start', 'end', 'update', 'cancel', 'prize'],
+  publicSubs: ['start', 'cancel', 'prize'],
 };

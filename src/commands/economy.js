@@ -14,8 +14,13 @@ module.exports = {
       sub.setName('leaderboard')
         .setDescription('Richest linked members')),
 
+  skipRegister: true,
+
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
+    return this.run(interaction, interaction.options.getSubcommand());
+  },
+
+  async run(interaction, sub) {
     if (sub === 'balance') {
       const user = interaction.options.getUser('user') || interaction.user;
       const coins = await economy.getBalance(interaction.guildId, user.id);

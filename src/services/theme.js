@@ -67,7 +67,7 @@ const COPY = {
   raffleOpen: [
     'Tickets are 150k GP each, paid in game. Linked RSN or you don’t exist.',
     '150k a ticket. Pay in game, then tap Enter. I’ll draw later — no crying in DMs.',
-    'Want in? 150k GP to staff, then the button. `/member link` first.',
+    'Want in? 150k GP to staff, then the button. `/me link` first.',
   ],
   raffleWon: [
     'Drawn. That’s the name. Raffle’s dead.',
@@ -107,7 +107,7 @@ const EMPTY = {
   events: 'Nothing on the calendar. `/event create` if you want a mass.',
   raffles: 'No raffle open.',
   polls: 'No vote running.',
-  members: 'Nobody’s linked. `/member link` your RSN or you’re a ghost.',
+  members: 'Nobody’s linked. `/me link` your RSN or you’re a ghost.',
   standings: 'No XP on the board yet.',
 };
 
@@ -151,6 +151,10 @@ function rankLines(rows, formatRow) {
 function field(name, value, inline = false) {
   const text = value == null || value === '' ? '—' : String(value);
   return { name, value: text.slice(0, 1024), inline };
+}
+
+function prizeField(text) {
+  return field('Prize', text, false);
 }
 
 const KIND_FACE = {
@@ -233,6 +237,7 @@ module.exports = {
   medal,
   rankLines,
   field,
+  prizeField,
   embed,
   fromJson,
   categoryIcon,

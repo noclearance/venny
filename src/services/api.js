@@ -2,8 +2,10 @@
 // Grok / dashboards call these. Slash commands stay on Discord.
 // Do not split this into a second Render worker — two logins = Unknown interaction.
 
+const { PermissionFlagsBits } = require('discord.js');
 const { getDb } = require('../db/database');
 const theme = require('./theme');
+const { clanRankNames } = require('./ranks');
 
 const DEFAULT_CORS = 'https://misclickerz-hub.base44.app';
 
@@ -92,16 +94,6 @@ function readBody(req, limit = 80_000) {
 
 function guildIdFrom(body) {
   return String(body?.guild_id || process.env.GUILD_ID || process.env.CLAN_GUILD_ID || '').trim();
-}
-
-function clanRankNames() {
-  return {
-    trial: process.env.ROLE_TRIAL || 'Trial',
-    member: process.env.ROLE_MEMBER || 'Member',
-    veteran: process.env.ROLE_VETERAN || 'Veteran',
-    officer: process.env.ROLE_OFFICER || 'Officer',
-    admin: process.env.ROLE_ADMIN || 'Admin',
-  };
 }
 
 function discordNameForRank(rank) {
@@ -208,10 +200,17 @@ async function syncRank(client, body) {
 
   const guild = await client.guilds.fetch(guildId);
   await guild.roles.fetch();
+  const me = guild.members.me;
+  if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+    throw new Error('Venny needs Manage Roles. Run `/config ranks` and drag Venny above Trial/Member/Veteran/Officer/Admin.');
+  }
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) throw new Error('that Discord user is not in this server');
 
   const role = await resolveRole(guild, body);
+  if (me.roles.highest.comparePositionTo(role) <= 0) {
+    throw new Error(`Venny’s role is not above **${role.name}**. Server Settings → Roles → drag Venny up. \`/config ranks\` shows the list.`);
+  }
   const reason = String(body.reason || `Hub rank sync: ${role.name}`).slice(0, 200);
   const exclusive = body.exclusive !== false;
   const removed = [];

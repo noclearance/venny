@@ -37,7 +37,19 @@ function payRates(...reasons) {
 function payNote(...reasons) {
   const lines = payRates(...reasons);
   if (!lines) return '';
-  return `${lines}\nCheck yours with \`/economy balance\`.`;
+  return `${lines}\nCheck yours with \`/me balance\`.`;
+}
+
+function clipPrize(value) {
+  return String(value || '').trim().slice(0, 200);
+}
+
+function prizeLine(reason, extra) {
+  const loot = clipPrize(extra);
+  const credit = payRates(reason);
+  if (loot && credit) return `**${loot}** · ${credit}`;
+  if (loot) return `**${loot}**`;
+  return credit || '';
 }
 
 async function getBalance(guildId, userId) {
@@ -62,7 +74,7 @@ async function tell(client, userId, amount, reason, balance) {
         title: 'Guild credits',
         description: `**+${amount}** for ${why}.\nNobody else sees this.`,
         fields: [theme.field('Balance', `**${balance.toLocaleString()}** guild credits`, true)],
-        footer: '/economy balance if you want the card',
+        footer: '/me balance if you want the card',
       })],
     });
   } catch {
@@ -90,4 +102,4 @@ async function leaderboard(guildId, limit = 15) {
   return await db.prepare('SELECT user_id, coins FROM economy_balances WHERE guild_id = ? AND coins > 0 ORDER BY coins DESC LIMIT ?').all(guildId, limit);
 }
 
-module.exports = { REWARDS, REWARD_COPY, coins, payRates, payNote, getBalance, award, leaderboard };
+module.exports = { REWARDS, REWARD_COPY, coins, payRates, payNote, clipPrize, prizeLine, getBalance, award, leaderboard };
