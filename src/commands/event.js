@@ -19,9 +19,17 @@ module.exports = {
     .addSubcommand(sub =>
       sub.setName('create')
         .setDescription('Post a mass / hangout with RSVP and a 15-minute reminder')
-        .addStringOption(opt => opt.setName('title').setDescription('Event title').setRequired(true))
+        .addStringOption(opt =>
+          opt.setName('title')
+            .setDescription('Short name, e.g. ToB mass')
+            .setRequired(true)
+            .setMaxLength(100))
+        .addStringOption(opt =>
+          opt.setName('about')
+            .setDescription('What this actually is — world, gear, who should come. Not optional.')
+            .setRequired(true)
+            .setMaxLength(1000))
         .addStringOption(opt => opt.setName('datetime').setDescription('When it starts, e.g. 2026-08-25 19:00 or Dec 25 2026 7pm (server TZ, or append EST/PST)').setRequired(true))
-        .addStringOption(opt => opt.setName('description').setDescription('Event details, location, requirements, etc.').setRequired(false))
         .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reminders (defaults to current channel)').setRequired(false))
         .addStringOption(opt =>
           opt.setName('recurring')
@@ -64,9 +72,12 @@ module.exports = {
     }
 
     if (sub === 'create') {
-      const title = interaction.options.getString('title');
+      const title = interaction.options.getString('title').trim();
       const datetimeStr = interaction.options.getString('datetime');
-      const description = interaction.options.getString('description') || '';
+      const description = (interaction.options.getString('about') || '').trim();
+      if (!description) {
+        return commandFail(interaction, 'Tell me what this mass actually is in **about** (world, boss, gear, who should show). I will not invent that.');
+      }
       const recurrence = interaction.options.getString('recurring') || 'none';
       const category = interaction.options.getString('category') || 'general';
       const channelOption = interaction.options.getChannel('channel');
@@ -100,19 +111,8 @@ module.exports = {
         category,
       };
 
-      const made = await require('../services/cards').make('event', {
-        job: 'event_start',
-        facts: { title, category, staffNotes: description || null },
-        fallbackTitle: title,
-        fallbackDescription: description || theme.line('eventPosted', event.id),
-      });
-
       await interaction.reply({
-        embeds: [buildEventContent(event, await getAttendance(event.id), {
-          title: made.json.title,
-          intro: made.json.description,
-          color: made.json.color,
-        })],
+        embeds: [buildEventContent(event, await getAttendance(event.id))],
         components: [buildRsvpRow(event.id)],
       });
 
@@ -120,7 +120,7 @@ module.exports = {
       await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?').run(reply.id, reply.channelId, event.id);
       await require('../services/cards').publish(interaction.client, interaction.guildId, {
         kind: 'event',
-        json: made.json,
+        json: { title, description, source: 'staff' },
         fields: [
           theme.field('When', theme.when(event.event_time), true),
           theme.field('Guild credits', economy.payNote('event_rsvp')),

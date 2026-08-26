@@ -20,7 +20,7 @@ module.exports = {
         '`/vote sotw` — poll, then it can auto-start on WOM',
       ].join('\n')),
       theme.field('Masses (calendar)', [
-        '`/event create` — ToB, hangout, RSVP, 15-min ping',
+        '`/event create` — **about** is required (what the mass is). RSVP + 15-min ping',
         '`/event list` `/remind` `/cancel`',
         '`/subscribe add` — pings for a category',
       ].join('\n')),
