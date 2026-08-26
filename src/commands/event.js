@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { getDb } = require('../db/database');
 const { parseEventDate } = require('../services/timezone');
+const { commandFail } = require('../services/commandFail');
 const { isModerator } = require('../services/permissions');
 const { buildConfirmationRow } = require('../services/confirmations');
 const { buildRsvpRow, buildEventContent, getAttendance } = require('../services/rsvp');
@@ -19,7 +20,7 @@ module.exports = {
       sub.setName('create')
         .setDescription('Post a mass / hangout with RSVP and a 15-minute reminder')
         .addStringOption(opt => opt.setName('title').setDescription('Event title').setRequired(true))
-        .addStringOption(opt => opt.setName('datetime').setDescription('When the event starts (e.g. "2024-12-25 19:00" — uses server timezone or append EST/PST/etc)').setRequired(true))
+        .addStringOption(opt => opt.setName('datetime').setDescription('When it starts, e.g. 2026-08-25 19:00 or Dec 25 2026 7pm (server TZ, or append EST/PST)').setRequired(true))
         .addStringOption(opt => opt.setName('description').setDescription('Event details, location, requirements, etc.').setRequired(false))
         .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reminders (defaults to current channel)').setRequired(false))
         .addStringOption(opt =>
@@ -72,13 +73,16 @@ module.exports = {
       const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
       const channel = channelOption || (settings && settings.reminder_channel ? await interaction.client.channels.fetch(settings.reminder_channel).catch(() => null) : null) || interaction.channel;
 
-      const eventDate = await parseEventDate(datetimeStr, interaction.guildId);
-      if (!eventDate) {
-        return interaction.reply({ content: '❌ Could not parse that date/time. Try a format like `2024-12-25 19:00` or `Dec 25 2024 7pm`. Set your server timezone with `/config timezone`.', flags: 64 });
+      const parsed = await parseEventDate(datetimeStr, interaction.guildId);
+      if (!parsed.date) {
+        return commandFail(interaction, parsed.error);
       }
-
+      const eventDate = parsed.date;
       if (eventDate < new Date()) {
-        return interaction.reply({ content: '❌ That date is in the past.', flags: 64 });
+        return commandFail(
+          interaction,
+          `That time is already past (${theme.when(eventDate.toISOString())}). Server timezone is **${parsed.tz}**.`,
+        );
       }
 
       const result = await db.prepare(`

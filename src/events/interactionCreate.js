@@ -66,12 +66,7 @@ module.exports = {
       } catch (err) {
         logFail(`Command ${interaction.commandName}`, err);
         if (isGone(err)) return;
-        const msg = { content: 'Something went wrong running that command.', flags: 64 };
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(msg).catch(() => {});
-        } else {
-          await interaction.reply(msg).catch(() => {});
-        }
+        await require('../services/commandFail').commandFail(interaction, err);
       }
       return;
     }
@@ -131,12 +126,7 @@ module.exports = {
       } catch (err) {
         logFail(`Button ${interaction.customId}`, err);
         if (isGone(err)) return;
-        const msg = { content: 'Something went wrong with that button.', flags: 64 };
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(msg).catch(() => {});
-        } else {
-          await interaction.reply(msg).catch(() => {});
-        }
+        await require('../services/commandFail').commandFail(interaction, err);
       }
     }
   },

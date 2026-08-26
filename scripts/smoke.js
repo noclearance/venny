@@ -89,6 +89,36 @@ check('pickLiveCompetition does not attach the wrong skill', () => {
   assert.strictEqual(pickLiveCompetition([{ id: 3, metric: 'agility', endsAt: past }]), null);
 });
 
+const { parseInZone } = require('../src/services/timezone');
+check('event datetime parses advertised and common forms', () => {
+  const tz = 'America/New_York';
+  const ok = [
+    '2024-12-25 19:00',
+    'Dec 25 2024 7pm',
+    'Dec 25 2024 7:00 PM',
+    'Dec 25, 2024 7pm',
+    '2026-8-25 19:00',
+    '2026-08-25 7pm',
+    '8/25/2026 7:00pm',
+    '8/25/2026 19:00',
+    '  2024-12-25 19:00  ',
+    '2024-12-25 19:00:00',
+    'Dec 25 2024 7:00pm',
+    '2024-12-25 19:00 EST',
+  ];
+  for (const s of ok) {
+    const d = parseInZone(s, tz);
+    assert(d instanceof Date && !Number.isNaN(d.getTime()), `failed to parse ${JSON.stringify(s)}`);
+  }
+  assert.strictEqual(parseInZone('not a date', tz), null);
+});
+
+const { safeReason } = require('../src/services/commandFail');
+check('commandFail hides secrets in error text', () => {
+  assert.strictEqual(safeReason('Could not parse date'), 'Could not parse date');
+  assert.match(safeReason('password leaked'), /staff/i);
+});
+
 const { stillOpen } = require('../src/services/raffleRun');
 check('raffle stillOpen', () => {
   assert.strictEqual(stillOpen({ drawn: 1, ends_at: new Date(Date.now() + 3600000).toISOString() }), false);

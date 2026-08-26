@@ -87,13 +87,16 @@ module.exports = {
       if (untilStr) {
         const { parseEventDate } = require('../services/timezone');
         const parsed = await parseEventDate(untilStr, interaction.guildId);
-        if (!parsed) {
-          return interaction.reply({ content: 'Could not parse that close time. Try `2026-08-24 19:00` or skip until and use hours.', flags: 64 });
+        if (!parsed.date) {
+          return require('../services/commandFail').commandFail(interaction, parsed.error);
         }
-        if (parsed <= new Date()) {
-          return interaction.reply({ content: 'Close time is in the past.', flags: 64 });
+        if (parsed.date <= new Date()) {
+          return require('../services/commandFail').commandFail(
+            interaction,
+            `Close time is already past (${require('../services/theme').when(parsed.date.toISOString())}).`,
+          );
         }
-        endsAt = parsed;
+        endsAt = parsed.date;
       } else {
         endsAt = new Date(Date.now() + hours * 60 * 60 * 1000);
       }
