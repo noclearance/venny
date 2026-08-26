@@ -11,7 +11,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('sotw')
     .setDescription('Wise Old Man Skill of the Week — not a calendar mass')
-    .addSubcommand(sub =>
+    .addSubcommand(sub => {
       sub.setName('start')
         .setDescription('Open a WOM week (attaches a live matching competition if one exists)')
         .addStringOption(opt =>
@@ -33,7 +33,9 @@ module.exports = {
           opt.setName('prize')
             .setDescription('In-game loot for first place, e.g. bond or 50m')
             .setRequired(false)
-            .setMaxLength(200)))
+            .setMaxLength(200));
+      return require('../services/subscriptions').addPingOptions(sub);
+    })
     .addSubcommand(sub =>
       sub.setName('standings')
         .setDescription('Show current SOTW standings')
@@ -102,6 +104,12 @@ module.exports = {
       const durationDays = interaction.options.getInteger('duration_days') || 7;
       const title = interaction.options.getString('title') || null;
       const prize = interaction.options.getString('prize') || null;
+      const pingOpts = require('../services/subscriptions').pingFromInteraction(interaction);
+      try {
+        require('../services/subscriptions').assertCanPing(interaction.member, interaction.guild.members.me, pingOpts);
+      } catch (err) {
+        return require('../services/commandFail').commandFail(interaction, err);
+      }
 
       await interaction.deferReply();
 
@@ -120,7 +128,15 @@ module.exports = {
         return interaction.editReply(`❌ ${result.error}`);
       }
 
-      await interaction.editReply(result.embed ? { embeds: [result.embed] } : result.response);
+      const ping = await require('../services/subscriptions').mentionFor({
+        guildId: interaction.guildId,
+        category: 'sotw',
+        mode: pingOpts.mode,
+        roleId: pingOpts.roleId,
+      });
+      await interaction.editReply(result.embed
+        ? { content: ping.content, embeds: [result.embed], allowedMentions: ping.allowedMentions }
+        : result.response);
       const posted = await interaction.fetchReply();
       const cards = require('../services/cards');
       cards.flavorLater(posted, result.flavor);
@@ -131,6 +147,7 @@ module.exports = {
         fields: result.flavor?.fields,
         sourceChannelId: posted.channelId,
         sourceMessageId: posted.id,
+        mention: ping,
       });
       await audit(interaction.client, interaction.guildId, `SOTW #${result.sotwId} **${skill}** started by <@${interaction.user.id}>`);
       return;

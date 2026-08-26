@@ -85,6 +85,14 @@ check('mod is staff-only with kick timeout ban purge', () => {
   }
 });
 
+check('event create has ping options', () => {
+  const event = loaded.find(c => c.json.name === 'event');
+  const create = (event.json.options || []).find(o => o.name === 'create');
+  const names = (create.options || []).map(o => o.name);
+  assert(names.includes('ping'), 'event create missing ping');
+  assert(names.includes('ping_role'), 'event create missing ping_role');
+});
+
 check('moderation refuses self and owner', () => {
   const { assertCanAct, snowflake, DURATIONS } = require('../src/services/moderation');
   assert.strictEqual(snowflake('123456789012345678'), '123456789012345678');
@@ -247,6 +255,18 @@ check('joinDescription skips duplicate notes', () => {
 });
 
 (async () => {
+  await checkAsync('mentionFor everyone is launch-only', async () => {
+    const { mentionFor } = require('../src/services/subscriptions');
+    const launch = await mentionFor({ mode: 'everyone' });
+    assert.strictEqual(launch.content, '@everyone');
+    assert(launch.allowedMentions.parse.includes('everyone'));
+    const reminder = await mentionFor({ mode: 'everyone', forReminder: true, roleId: '99' });
+    assert.strictEqual(reminder.content, '<@&99>');
+    assert(!reminder.allowedMentions.parse.includes('everyone'));
+    const off = await mentionFor({ mode: 'off' });
+    assert.strictEqual(off.content, undefined);
+  });
+
   await checkAsync('cards.make fallback does not duplicate notes', async () => {
     const notes = 'Necklace of Anguish / or gold';
     const made = await make('event', {

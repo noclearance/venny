@@ -58,7 +58,13 @@ async function tick(client) {
       const theme = require('./theme');
       const subs = require('./subscriptions');
       const category = event.category || 'general';
-      const mentionStr = await subs.buildMentionString(event.guild_id, category);
+      const ping = await subs.mentionFor({
+        guildId: event.guild_id,
+        category,
+        mode: event.ping_mode,
+        roleId: event.ping_role_id,
+        forReminder: true,
+      });
 
       const economy = require('./economy');
       const made = await require('./cards').make('event', {
@@ -74,9 +80,9 @@ async function tick(client) {
         fields: [theme.field('Guild credits', economy.payNote('event_rsvp'))],
       });
       await channel.send({
-        content: mentionStr || undefined,
+        content: ping.content,
         embeds: [made.embed],
-        allowedMentions: { parse: ['users', 'roles'] },
+        allowedMentions: ping.allowedMentions,
       });
 
       await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
@@ -106,8 +112,8 @@ async function tick(client) {
       } while (newDate.getTime() <= nowMs);
 
       await db.prepare(`
-        INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, parent_event_id, category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, parent_event_id, category, ping_mode, ping_role_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         event.guild_id,
         event.title,
@@ -117,7 +123,9 @@ async function tick(client) {
         event.created_by,
         event.recurrence,
         event.parent_event_id || event.id,
-        event.category || 'general'
+        event.category || 'general',
+        event.ping_mode || 'category',
+        event.ping_role_id || null,
       );
 
       await db.prepare('UPDATE events SET next_created = 1 WHERE id = ?').run(event.id);

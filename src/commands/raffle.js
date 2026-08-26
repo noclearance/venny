@@ -18,7 +18,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('raffle')
     .setDescription('Clan raffles — set hours (or until), then I draw')
-    .addSubcommand(sub =>
+    .addSubcommand(sub => {
       sub.setName('create')
         .setDescription('Create a new raffle with a button for entries')
         .addStringOption(opt => opt.setName('title').setDescription('Raffle title').setRequired(true))
@@ -50,7 +50,9 @@ module.exports = {
               { name: 'SOTW wins', value: 'sotw' },
               { name: 'Event attendance (this server)', value: 'attendance' },
               { name: 'Combined (wins + attendance)', value: 'activity' },
-            )))
+            ));
+      return require('../services/subscriptions').addPingOptions(sub);
+    })
     .addSubcommand(sub =>
       sub.setName('entries')
         .setDescription('Show how many entries a raffle has')
@@ -80,6 +82,12 @@ module.exports = {
     }
 
     if (sub === 'create') {
+      const pingOpts = require('../services/subscriptions').pingFromInteraction(interaction);
+      try {
+        require('../services/subscriptions').assertCanPing(interaction.member, interaction.guild.members.me, pingOpts);
+      } catch (err) {
+        return require('../services/commandFail').commandFail(interaction, err);
+      }
       const title = interaction.options.getString('title');
       const economy = require('../services/economy');
       const loot = economy.clipPrize(interaction.options.getString('prize'));
@@ -142,9 +150,17 @@ module.exports = {
         footer: `Raffle #${raffleId}  ·  Misclickers`,
         timestamp: true,
       });
+      const ping = await require('../services/subscriptions').mentionFor({
+        guildId: interaction.guildId,
+        category: 'raffle',
+        mode: pingOpts.mode,
+        roleId: pingOpts.roleId,
+      });
       const reply = await interaction.reply({
+        content: ping.content,
         embeds: [made.embed],
         components: [row],
+        allowedMentions: ping.allowedMentions,
         fetchReply: true,
       });
       const cards = require('../services/cards');
@@ -157,6 +173,7 @@ module.exports = {
           theme.field('Ticket', ticketGp > 0 ? `${ticket} each` : 'Free', true),
           theme.field('Closes', theme.when(endsIso), true),
         ],
+        mention: ping,
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
       });

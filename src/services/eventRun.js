@@ -15,6 +15,8 @@ async function createMass({
   eventDate,
   recurrence = 'none',
   category = 'general',
+  pingMode = 'category',
+  pingRoleId = null,
 }) {
   const db = getDb();
   const name = String(title || '').trim().slice(0, 100);
@@ -28,10 +30,11 @@ async function createMass({
     throw new Error(`That time is already past (${theme.when(eventDate.toISOString())}).`);
   }
 
+  const mode = pingMode === 'everyone' || pingMode === 'off' ? pingMode : 'category';
   const result = await db.prepare(`
-    INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(guildId, name, description, eventDate.toISOString(), channel.id, userId, recurrence, category);
+    INSERT INTO events (guild_id, title, description, event_time, channel_id, created_by, recurrence, category, ping_mode, ping_role_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(guildId, name, description, eventDate.toISOString(), channel.id, userId, recurrence, category, mode, pingRoleId || null);
 
   const event = {
     id: result.lastInsertRowid,
@@ -41,6 +44,8 @@ async function createMass({
     channel_id: channel.id,
     recurrence,
     category,
+    ping_mode: mode,
+    ping_role_id: pingRoleId || null,
   };
 
   const payload = {
@@ -54,6 +59,12 @@ async function afterPosted(client, guildId, event, message, userId) {
   const db = getDb();
   await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?')
     .run(message.id, message.channelId, event.id);
+  const ping = await subs.mentionFor({
+    guildId,
+    category: event.category,
+    mode: event.ping_mode,
+    roleId: event.ping_role_id,
+  });
   await require('./cards').publish(client, guildId, {
     kind: 'event',
     json: { title: event.title, description: event.description, source: 'staff' },
@@ -63,9 +74,10 @@ async function afterPosted(client, guildId, event, message, userId) {
     ],
     sourceChannelId: message.channelId,
     sourceMessageId: message.id,
-    mention: await subs.buildMentionString(guildId, event.category),
+    mention: ping,
   });
-  await audit(client, guildId, `Event #${event.id} **${event.title}** created by <@${userId}>`);
+  const pingNote = event.ping_mode === 'everyone' ? ' ping @everyone' : (event.ping_role_id ? ' ping role' : '');
+  await audit(client, guildId, `Event #${event.id} **${event.title}** created by <@${userId}>${pingNote}`);
 }
 
 async function handleCreateModal(interaction) {

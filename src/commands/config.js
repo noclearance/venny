@@ -61,7 +61,7 @@ function buildData(settings = {}) {
         .addStringOption(opt => opt.setName('timezone').setDescription('IANA timezone, e.g. America/New_York, Europe/London, UTC').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('event-role')
-        .setDescription('Set a Discord role to ping for an event category')
+        .setDescription('Default ping role for a mass category (Trial/Member from /config ranks is fine)')
         .addStringOption(opt => opt.setName('category').setDescription('Event category').setRequired(true).addChoices(
           { name: 'General', value: 'general' },
           { name: 'Boss Masses', value: 'boss' },

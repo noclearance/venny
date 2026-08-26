@@ -35,6 +35,9 @@ module.exports = {
       ].join('\n')),
       theme.field('Masses', [
         '`/event create` — **about** is required',
+        '`ping:everyone` — launch only (not the 15-minute reminder)',
+        '`ping_role:` — Trial/Member from `/config ranks` works',
+        '`/config event-role` — default role for a category',
         '`@Venny make an event` — staff get a form',
         '`/event list` · `/subscribe add`',
       ].join('\n')),

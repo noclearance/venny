@@ -26,7 +26,7 @@ module.exports = {
           { name: 'Week', value: 'week' },
           { name: 'Month', value: 'month' },
         )))
-    .addSubcommand(sub =>
+    .addSubcommand(sub => {
       sub.setName('week')
         .setDescription('Start or show Boss of the Week (WOM KC, not /event)')
         .addStringOption(opt => opt.setName('boss').setDescription('Boss to start').addChoices(...BOSS_CHOICES))
@@ -34,7 +34,9 @@ module.exports = {
         .addStringOption(opt =>
           opt.setName('prize')
             .setDescription('In-game loot for first place, e.g. bond or 50m')
-            .setMaxLength(200)))
+            .setMaxLength(200));
+      return require('../services/subscriptions').addPingOptions(sub);
+    })
     .addSubcommand(sub =>
       sub.setName('end')
         .setDescription('End the live hunt now and pay first place')),
@@ -61,6 +63,12 @@ module.exports = {
           return interaction.reply({ content: 'Mods start BOTW.', flags: 64 });
         }
         const days = interaction.options.getInteger('days') || 7;
+        const pingOpts = require('../services/subscriptions').pingFromInteraction(interaction);
+        try {
+          require('../services/subscriptions').assertCanPing(interaction.member, interaction.guild.members.me, pingOpts);
+        } catch (err) {
+          return require('../services/commandFail').commandFail(interaction, err);
+        }
         const result = await botw.startBotw({
           guildId: interaction.guildId,
           channelId: interaction.channelId,
@@ -72,13 +80,25 @@ module.exports = {
         if (!result.success) {
           return interaction.reply({ content: result.error, flags: 64 });
         }
-        const posted = await interaction.reply({ embeds: [result.embed], fetchReply: true });
+        const ping = await require('../services/subscriptions').mentionFor({
+          guildId: interaction.guildId,
+          category: 'botw',
+          mode: pingOpts.mode,
+          roleId: pingOpts.roleId,
+        });
+        const posted = await interaction.reply({
+          content: ping.content,
+          embeds: [result.embed],
+          allowedMentions: ping.allowedMentions,
+          fetchReply: true,
+        });
         const cards = require('../services/cards');
         cards.flavorLater(posted, result.flavor);
         await cards.publish(interaction.client, interaction.guildId, {
           kind: 'danger',
           json: result.card,
           fields: result.flavor?.fields,
+          mention: ping,
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });

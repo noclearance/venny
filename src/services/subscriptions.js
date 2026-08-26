@@ -60,6 +60,71 @@ async function buildMentionString(guildId, category) {
   return userIds.map(id => `<@${id}>`).join(' ');
 }
 
+const QUIET = { content: undefined, allowedMentions: { parse: [] } };
+
+function allowedFor(content) {
+  if (!content) return { parse: [] };
+  if (/@everyone|@here/.test(content)) {
+    return { parse: ['everyone', 'roles', 'users'] };
+  }
+  return { parse: ['roles', 'users'] };
+}
+
+function pingFromInteraction(interaction) {
+  const mode = interaction.options.getString('ping') || 'category';
+  const role = interaction.options.getRole('ping_role');
+  return { mode, roleId: role ? role.id : null, role: role || null };
+}
+
+function addPingOptions(sub) {
+  return sub
+    .addStringOption(opt =>
+      opt.setName('ping')
+        .setDescription('Who to ping on the launch post')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Category role or subscribers (default)', value: 'category' },
+          { name: '@everyone (launch only, not the reminder)', value: 'everyone' },
+          { name: 'Nobody', value: 'off' },
+        ))
+    .addRoleOption(opt =>
+      opt.setName('ping_role')
+        .setDescription('Ping this role instead — Trial/Member from /config ranks works'));
+}
+
+function assertCanPing(member, me, ping) {
+  const { PermissionFlagsBits } = require('discord.js');
+  const everyone = ping?.mode === 'everyone';
+  const needsEveryone = everyone || (ping?.role && ping.role.mentionable === false);
+  if (!needsEveryone) return;
+  if (!member?.permissions?.has(PermissionFlagsBits.MentionEveryone)) {
+    throw new Error('You need **Mention Everyone** to ping @everyone or a rank role that is not set mentionable (Trial/Member from `/config ranks`).');
+  }
+  if (!me?.permissions?.has(PermissionFlagsBits.MentionEveryone)) {
+    throw new Error('Venny needs **Mention Everyone** for that ping. Turn it on for the bot role.');
+  }
+}
+
+async function mentionFor({
+  guildId,
+  category = 'general',
+  mode = 'category',
+  roleId = null,
+  forReminder = false,
+} = {}) {
+  const m = String(mode || 'category');
+  if (m === 'off' || m === 'none') return QUIET;
+  if (m === 'everyone' && !forReminder) {
+    return { content: '@everyone', allowedMentions: { parse: ['everyone'] } };
+  }
+  if (roleId) {
+    return { content: `<@&${roleId}>`, allowedMentions: { parse: ['roles'] } };
+  }
+  const text = await buildMentionString(guildId, category);
+  if (!text) return QUIET;
+  return { content: text, allowedMentions: allowedFor(text) };
+}
+
 module.exports = {
   CATEGORIES,
   subscribe,
@@ -70,4 +135,9 @@ module.exports = {
   getEventRole,
   setEventRole,
   buildMentionString,
+  mentionFor,
+  pingFromInteraction,
+  addPingOptions,
+  assertCanPing,
+  QUIET,
 };

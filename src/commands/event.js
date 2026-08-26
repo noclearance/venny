@@ -14,7 +14,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('event')
     .setDescription('Clan masses and calendar — not Skill of the Week')
-    .addSubcommand(sub =>
+    .addSubcommand(sub => {
       sub.setName('create')
         .setDescription('Post a mass / hangout with RSVP and a 15-minute reminder')
         .addStringOption(opt =>
@@ -48,7 +48,9 @@ module.exports = {
               { name: 'PvM', value: 'pvm' },
               { name: 'Skilling', value: 'skilling' },
               { name: 'Social', value: 'social' },
-            )))
+            ));
+      return subs.addPingOptions(sub);
+    })
     .addSubcommand(sub =>
       sub.setName('list')
         .setDescription('List upcoming events'))
@@ -78,6 +80,12 @@ module.exports = {
       }
       const recurrence = interaction.options.getString('recurring') || 'none';
       const category = interaction.options.getString('category') || 'general';
+      const ping = subs.pingFromInteraction(interaction);
+      try {
+        subs.assertCanPing(interaction.member, interaction.guild.members.me, ping);
+      } catch (err) {
+        return commandFail(interaction, err);
+      }
       const channelOption = interaction.options.getChannel('channel');
       const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
       const channel = channelOption || (settings && settings.reminder_channel ? await interaction.client.channels.fetch(settings.reminder_channel).catch(() => null) : null) || interaction.channel;
@@ -98,8 +106,20 @@ module.exports = {
           eventDate: parsed.date,
           recurrence,
           category,
+          pingMode: ping.mode,
+          pingRoleId: ping.roleId,
         });
-        await interaction.reply(payload);
+        const launch = await subs.mentionFor({
+          guildId: interaction.guildId,
+          category,
+          mode: ping.mode,
+          roleId: ping.roleId,
+        });
+        await interaction.reply({
+          ...payload,
+          content: launch.content,
+          allowedMentions: launch.allowedMentions,
+        });
         const reply = await interaction.fetchReply();
         await afterPosted(interaction.client, interaction.guildId, event, reply, interaction.user.id);
       } catch (err) {
@@ -143,9 +163,15 @@ module.exports = {
       }
 
       const alreadyReminded = Number(event.reminder_sent) === 1;
-      const mentionStr = alreadyReminded
-        ? null
-        : await subs.buildMentionString(event.guild_id, event.category || 'general');
+      const ping = alreadyReminded
+        ? subs.QUIET
+        : await subs.mentionFor({
+          guildId: event.guild_id,
+          category: event.category || 'general',
+          mode: event.ping_mode,
+          roleId: event.ping_role_id,
+          forReminder: true,
+        });
       const made = await require('../services/cards').make('event', {
         job: 'event_remind',
         facts: { title: event.title, category: event.category || 'general', alreadyReminded },
@@ -161,9 +187,9 @@ module.exports = {
         ],
       });
       await interaction.reply({
-        content: mentionStr || undefined,
+        content: ping.content,
         embeds: [made.embed],
-        allowedMentions: alreadyReminded ? { parse: [] } : { parse: ['users', 'roles'] },
+        allowedMentions: ping.allowedMentions,
       });
       if (!alreadyReminded) {
         await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);

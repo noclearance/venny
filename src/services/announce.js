@@ -29,9 +29,12 @@ async function broadcast(client, guildId, {
 
   try {
     const channel = await client.channels.fetch(channelId);
+    const ping = mention && typeof mention === 'object'
+      ? mention
+      : { content: mention || undefined, allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] } };
     return channel.send({
-      content: mention || undefined,
-      allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] },
+      content: ping.content || undefined,
+      allowedMentions: ping.allowedMentions || { parse: [] },
       embeds: [theme.fromJson(kind, face, {
         fields: extra,
         url: jump || undefined,

@@ -469,6 +469,8 @@ async function initDb() {
   await db.exec('UPDATE polls SET duration_days = sotw_duration WHERE duration_days IS NULL');
   await migrateColumn(db, 'sotw', 'prize', 'TEXT');
   await migrateColumn(db, 'botw', 'prize', 'TEXT');
+  await migrateColumn(db, 'events', 'ping_mode', "TEXT DEFAULT 'category'");
+  await migrateColumn(db, 'events', 'ping_role_id', 'TEXT');
 
   return db;
 }
