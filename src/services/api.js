@@ -39,8 +39,27 @@ function json(req, res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function looksLikeDiscordBotToken(value) {
+  const v = String(value || '').trim();
+  if (!v) return false;
+  const discord = (process.env.DISCORD_TOKEN || '').trim();
+  if (discord && v === discord) return true;
+  return /^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}$/.test(v);
+}
+
+let warnedDiscordAsApi = false;
+
 function apiToken() {
-  return (process.env.API_TOKEN || process.env.GROK_API_TOKEN || '').trim();
+  const raw = (process.env.API_TOKEN || process.env.GROK_API_TOKEN || '').trim();
+  if (!raw) return '';
+  if (looksLikeDiscordBotToken(raw)) {
+    if (!warnedDiscordAsApi) {
+      warnedDiscordAsApi = true;
+      console.warn('API_TOKEN is your Discord bot token. Make up a separate password for Base44 VITE_BOT_API_TOKEN and Render API_TOKEN.');
+    }
+    return '';
+  }
+  return raw;
 }
 
 function readBearer(req) {
@@ -60,7 +79,12 @@ function tokensMatch(got, expected) {
 function requireToken(req, res) {
   const expected = apiToken();
   if (!expected) {
-    json(req, res, 503, { error: 'API_TOKEN is not set on Render.' });
+    const mixed = looksLikeDiscordBotToken(process.env.API_TOKEN || process.env.GROK_API_TOKEN || '');
+    json(req, res, 503, {
+      error: mixed
+        ? 'API_TOKEN is your Discord bot token — make up a separate password for Render API_TOKEN and Base44 VITE_BOT_API_TOKEN.'
+        : 'API_TOKEN is not set on Render.',
+    });
     return false;
   }
   if (!tokensMatch(readBearer(req), expected)) {
@@ -308,4 +332,4 @@ async function handleApi(req, res, client) {
   return false;
 }
 
-module.exports = { handleApi, preflight, syncRank };
+module.exports = { handleApi, preflight, syncRank, readBearer, looksLikeDiscordBotToken, apiToken };

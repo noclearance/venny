@@ -248,6 +248,19 @@ check('sotw start uses one WOM attach path', () => {
 });
 
 const { joinDescription, make } = require('../src/services/cards');
+check('sync-rank Bearer is not the Discord token', () => {
+  const api = require('../src/services/api');
+  assert.strictEqual(api.readBearer({ headers: { authorization: 'Bearer abc' } }), 'abc');
+  assert.strictEqual(api.readBearer({ headers: { authorization: 'bearer xyz' } }), 'xyz');
+  assert.strictEqual(api.readBearer({ headers: { 'x-venny-key': 'k' } }), 'k');
+  assert(api.looksLikeDiscordBotToken('NOTADISCORDTOKEN0000.XXXXX.YYYYYYYYYYYYYYYYYYYYYY'));
+  assert(!api.looksLikeDiscordBotToken('mc_sync_8f3K2jR9pX'));
+  const prev = process.env.DISCORD_TOKEN;
+  process.env.DISCORD_TOKEN = 'same-secret-as-discord';
+  assert(api.looksLikeDiscordBotToken('same-secret-as-discord'));
+  process.env.DISCORD_TOKEN = prev;
+});
+
 check('joinDescription skips duplicate notes', () => {
   const json = { description: 'Bring a tent' };
   const out = joinDescription(json, ['Bring a tent', 'Fifteen minutes.', 'Bring a tent']);
