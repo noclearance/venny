@@ -44,12 +44,17 @@ module.exports = {
       ].join('\n')),
     ];
 
-    if (isAdmin(interaction.member) || isModerator(interaction.member)) {
-      const staff = [
-        '`/sotw start` · `/end` · `/cancel`',
-        '`/vote sotw` · `/vote botw` (admins — not on the member / list)',
-        '`/raffle create` needs **hours** (or `until`)',
-      ];
+    const canMod = require('../services/moderation').canSeeMod(interaction.member);
+    if (isAdmin(interaction.member) || isModerator(interaction.member) || canMod) {
+      const staff = [];
+      if (canMod) {
+        staff.push('`/mod timeout` · `kick` · `ban` · `purge` — Discord Kick/Ban/Timeout, not Manage Events');
+      }
+      if (isAdmin(interaction.member) || isModerator(interaction.member)) {
+        staff.push('`/sotw start` · `/end` · `/cancel`');
+        staff.push('`/vote sotw` · `/vote botw` (admins — not on the member / list)');
+        staff.push('`/raffle create` needs **hours** (or `until`)');
+      }
       if (isAdmin(interaction.member)) {
         staff.push('`/config ranks` — Trial/Member/Veteran/Officer/Admin + Venny’s height');
         if (missing.length) {

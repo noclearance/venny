@@ -53,7 +53,7 @@ for (const file of files) {
 
 check('expected command names', () => {
   const names = loaded.filter(c => !c.skipRegister).map(c => c.json.name).sort();
-  const want = ['bingo', 'boss', 'clan', 'config', 'event', 'export', 'help', 'me', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
+  const want = ['bingo', 'boss', 'clan', 'config', 'event', 'export', 'help', 'me', 'mod', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
   assert.deepStrictEqual(names, want);
 });
 
@@ -73,6 +73,35 @@ check('lookups nested under me and clan', () => {
 check('vote hidden from members', () => {
   const vote = loaded.find(c => c.json.name === 'vote');
   assert(vote.json.default_member_permissions, 'vote missing default_member_permissions');
+});
+
+check('mod is staff-only with kick timeout ban purge', () => {
+  const command = loaded.find(c => c.json.name === 'mod');
+  assert(command, 'missing /mod');
+  assert(command.json.default_member_permissions, 'mod visible to everyone');
+  const subs = (command.json.options || []).map(o => o.name);
+  for (const name of ['timeout', 'untimeout', 'kick', 'ban', 'unban', 'purge']) {
+    assert(subs.includes(name), `missing /mod ${name}`);
+  }
+});
+
+check('moderation refuses self and owner', () => {
+  const { assertCanAct, snowflake, DURATIONS } = require('../src/services/moderation');
+  assert.strictEqual(snowflake('123456789012345678'), '123456789012345678');
+  assert.strictEqual(snowflake('nope'), '');
+  assert(DURATIONS['1h'] > 0);
+  const guild = { ownerId: 'owner' };
+  const actor = { id: 'mod', guild, roles: { highest: { position: 10 } } };
+  const me = { id: 'bot', roles: { highest: { position: 8 } } };
+  assert.throws(() => assertCanAct(actor, { id: 'mod', roles: { highest: { position: 1 } } }, me), /yourself/);
+  assert.throws(() => assertCanAct(actor, { id: 'bot', roles: { highest: { position: 8 } } }, me), /myself/);
+  assert.throws(() => assertCanAct(actor, { id: 'owner', roles: { highest: { position: 0 } } }, me), /owner/);
+  assert.throws(() => assertCanAct(
+    { id: 'mod', guild, roles: { highest: { position: 5 } } },
+    { id: 'target', roles: { highest: { position: 5 } } },
+    me,
+  ), /at or above yours/);
+  assert.throws(() => assertCanAct(actor, { id: 'target', roles: { highest: { position: 9 } } }, me), /not above/);
 });
 
 const sotw = loaded.find(c => c.json.name === 'sotw');
