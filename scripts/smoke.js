@@ -86,6 +86,13 @@ check('rank ladder and auto thresholds', () => {
   assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 8, wins: 0 }), 'ranger');
   assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 8, wins: 1 }), 'dragonbane');
   assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 30, wins: 0 }), 'guardian');
+  assert.strictEqual(ranks.ORDER.every(k => ranks.STYLE[k]?.color && ranks.STYLE[k]?.emoji), true);
+  assert.strictEqual(new Set(ranks.ORDER.map(k => ranks.STYLE[k].color)).size, 10);
+  assert.strictEqual(ranks.nameMatches('🪵 Woodling', 'Woodling'), true);
+  assert.strictEqual(ranks.nameMatches('Woodling', 'Woodling'), true);
+  assert.strictEqual(ranks.nameMatches('Prospector', 'Woodling'), false);
+  assert.strictEqual(ranks.displayName('Woodling', ranks.STYLE.woodling, false), '🪵 Woodling');
+  assert.strictEqual(ranks.displayName('Woodling', ranks.STYLE.woodling, true), 'Woodling');
   const command = loaded.find(c => c.json.name === 'rank');
   assert(command, 'missing /rank');
   const subs = (command.json.options || []).map(o => o.name);

@@ -36,9 +36,10 @@ module.exports = {
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
       if (!member) return commandFail(interaction, 'They are not in this server.');
       const key = ranks.currentKey(member);
-      const name = key ? ranks.clanRankNames()[key] : null;
       await interaction.editReply({
-        content: name ? `<@${user.id}> is **${name}**.` : `<@${user.id}> has none of the clan ranks.`,
+        content: key
+          ? `<@${user.id}> is ${ranks.labelFor(key)}.`
+          : `<@${user.id}> has none of the clan ranks.`,
       });
       return;
     }
