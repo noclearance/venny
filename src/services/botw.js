@@ -151,7 +151,10 @@ async function finalizeBotw(client, botw) {
   if (!claimed.changes) return;
   if (winnerRsn) {
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(botw.guild_id, winnerRsn);
-    if (winner) await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client);
+    if (winner) {
+      await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client);
+      require('./ranks').maybePromote(client, botw.guild_id, winner.user_id);
+    }
   }
 }
 

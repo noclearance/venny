@@ -2,10 +2,9 @@
 // Grok / dashboards call these. Slash commands stay on Discord.
 // Do not split this into a second Render worker — two logins = Unknown interaction.
 
-const { PermissionFlagsBits } = require('discord.js');
 const { getDb } = require('../db/database');
 const theme = require('./theme');
-const { clanRankNames } = require('./ranks');
+const ranks = require('./ranks');
 
 const DEFAULT_CORS = [
   'https://misclickerz.ai.studio',
@@ -123,11 +122,6 @@ function guildIdFrom(body) {
   return String(body?.guild_id || process.env.GUILD_ID || process.env.CLAN_GUILD_ID || '').trim();
 }
 
-function discordNameForRank(rank) {
-  const key = String(rank || '').trim().toLowerCase();
-  return clanRankNames()[key] || String(rank || '').trim();
-}
-
 async function status(client) {
   return {
     ok: Boolean(client?.isReady?.()),
@@ -199,17 +193,12 @@ async function resolveRole(guild, body) {
     if (!role) throw new Error('role_id is not a role on this server');
     return role;
   }
-  const name = discordNameForRank(body.rank || body.role || body.name);
+  const name = ranks.discordNameForRank(body.rank || body.role || body.name);
   if (!name) throw new Error('discord_id and rank required');
   const roles = await guild.roles.fetch();
   const role = roles.find(r => r.name.toLowerCase() === name.toLowerCase());
   if (!role) throw new Error(`no Discord role named "${name}"`);
   return role;
-}
-
-function clanRankRoleIds(guild) {
-  const names = new Set(Object.values(clanRankNames()).map(n => n.toLowerCase()));
-  return guild.roles.cache.filter(r => names.has(r.name.toLowerCase()));
 }
 
 function extraStripIds(body) {
@@ -219,58 +208,22 @@ function extraStripIds(body) {
 }
 
 async function syncRank(client, body) {
-  if (!client?.isReady?.()) throw new Error('discord offline');
   const guildId = guildIdFrom(body);
   if (!guildId) throw new Error('guild_id missing (set GUILD_ID or pass guild_id)');
   const userId = snowflake(body.discord_id || body.user_id || body.discordId || body.userId);
   if (!userId) throw new Error('discord_id required');
-
-  const guild = await client.guilds.fetch(guildId);
-  await guild.roles.fetch();
-  const me = guild.members.me;
-  if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
-    throw new Error('Venny needs Manage Roles. Run `/config ranks` and drag Venny above Trial/Member/Veteran/Officer/Admin.');
+  const rank = body.rank || body.role || body.name;
+  if (!rank && !(body.role_id || body.roleId)) throw new Error('discord_id and rank required');
+  let name = rank;
+  if (body.role_id || body.roleId) {
+    const guild = await client.guilds.fetch(guildId);
+    name = (await resolveRole(guild, body)).name;
   }
-  const member = await guild.members.fetch(userId).catch(() => null);
-  if (!member) throw new Error('that Discord user is not in this server');
-
-  const role = await resolveRole(guild, body);
-  if (me.roles.highest.comparePositionTo(role) <= 0) {
-    throw new Error(`Venny’s role is not above **${role.name}**. Server Settings → Roles → drag Venny up. \`/config ranks\` shows the list.`);
-  }
-  const reason = String(body.reason || `Hub rank sync: ${role.name}`).slice(0, 200);
-  const exclusive = body.exclusive !== false;
-  const removed = [];
-
-  if (exclusive) {
-    const extra = extraStripIds(body);
-    const gone = member.roles.cache.filter(r => (
-      r.id !== role.id && (clanRankRoleIds(guild).has(r.id) || extra.has(r.id))
-    ));
-    if (gone.size) {
-      await member.roles.remove(gone, reason);
-      for (const r of gone.values()) removed.push({ id: r.id, name: r.name });
-    }
-  }
-
-  if (!member.roles.cache.has(role.id)) {
-    await member.roles.add(role, reason);
-  }
-
-  await require('./audit').audit(
-    client,
-    guildId,
-    `Hub rank **${role.name}** on <@${userId}>`,
-  );
-
-  return {
-    ok: true,
-    discord_id: userId,
-    rank: role.name,
-    role_id: role.id,
-    added: true,
-    removed,
-  };
+  return ranks.applyRank(client, guildId, userId, name, {
+    reason: body.reason || 'Hub rank sync',
+    exclusive: body.exclusive !== false,
+    extraStrip: extraStripIds(body),
+  });
 }
 
 async function handleApi(req, res, client) {

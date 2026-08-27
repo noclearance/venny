@@ -91,6 +91,7 @@ module.exports = {
         }
 
         await interaction.editReply({ embeds: [embed] });
+        require('../services/ranks').maybePromote(interaction.client, interaction.guildId, interaction.user.id);
       } catch (err) {
         await interaction.editReply(`❌ Could not find player "${rsn}" on Wise Old Man. Make sure the name is spelled correctly, and that the player has been looked up on wiseoldman.net at least once.`);
       }

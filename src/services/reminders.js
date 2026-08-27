@@ -264,7 +264,10 @@ async function finalizeSotw(client, sotw) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(sotw.guild_id, sotw.id, sotw.skill, winnerRsn, xpGained, sotw.starts_at, sotw.ends_at);
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(sotw.guild_id, winnerRsn);
-    if (winner) await require('./economy').award(sotw.guild_id, winner.user_id, 'sotw_win', client);
+    if (winner) {
+      await require('./economy').award(sotw.guild_id, winner.user_id, 'sotw_win', client);
+      require('./ranks').maybePromote(client, sotw.guild_id, winner.user_id);
+    }
   }
 
   await db.prepare('UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?').run(winnerRsn, sotw.id);

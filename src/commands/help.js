@@ -47,9 +47,14 @@ module.exports = {
       ].join('\n')),
     ];
 
+    const { PermissionFlagsBits } = require('discord.js');
     const canMod = require('../services/moderation').canSeeMod(interaction.member);
-    if (isAdmin(interaction.member) || isModerator(interaction.member) || canMod) {
+    const canRank = Boolean(interaction.member.permissions?.has(PermissionFlagsBits.ManageRoles));
+    if (isAdmin(interaction.member) || isModerator(interaction.member) || canMod || canRank) {
       const staff = [];
+      if (canRank) {
+        staff.push('`/rank set` · `clear` · `who` — clan ladder (Manage Roles)');
+      }
       if (canMod) {
         staff.push('`/mod timeout` · `kick` · `ban` · `purge` — Discord Kick/Ban/Timeout, not Manage Events');
       }
@@ -59,7 +64,7 @@ module.exports = {
         staff.push('`/raffle create` needs **hours** (or `until`)');
       }
       if (isAdmin(interaction.member)) {
-        staff.push('`/config ranks` — Trial/Member/Veteran/Officer/Admin + Venny’s height');
+        staff.push('`/config ranks` — create Woodling→Ascendant, check Venny’s height');
         if (missing.length) {
           staff.unshift(`Finish setup: ${missing.map(s => `\`/config ${s.sub}\``).join(' · ')}`);
         } else {

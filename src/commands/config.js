@@ -72,7 +72,7 @@ function buildData(settings = {}) {
         .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('ranks')
-        .setDescription('Create Trial/Member/Veteran/Officer/Admin and check Venny sits above them'));
+        .setDescription('Create clan ranks (Woodling → Ascendant) and check Venny sits above them'));
 
   for (const slot of missingChannelSlots(settings)) {
     cmd.addSubcommand(sub =>

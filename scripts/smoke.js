@@ -53,7 +53,7 @@ for (const file of files) {
 
 check('expected command names', () => {
   const names = loaded.filter(c => !c.skipRegister).map(c => c.json.name).sort();
-  const want = ['bingo', 'boss', 'clan', 'config', 'event', 'export', 'help', 'me', 'mod', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
+  const want = ['bingo', 'boss', 'clan', 'config', 'event', 'export', 'help', 'me', 'mod', 'rank', 'raffle', 'sotw', 'subscribe', 'vote', 'webhook'].sort();
   assert.deepStrictEqual(names, want);
 });
 
@@ -73,6 +73,23 @@ check('lookups nested under me and clan', () => {
 check('vote hidden from members', () => {
   const vote = loaded.find(c => c.json.name === 'vote');
   assert(vote.json.default_member_permissions, 'vote missing default_member_permissions');
+});
+
+check('rank ladder and auto thresholds', () => {
+  const ranks = require('../src/services/ranks');
+  assert.strictEqual(ranks.ORDER.length, 10);
+  assert.strictEqual(ranks.resolveKey('Trial'), 'woodling');
+  assert.strictEqual(ranks.resolveKey('Member'), 'prospector');
+  assert.strictEqual(ranks.discordNameForRank('ranger'), 'Ranger');
+  assert.strictEqual(ranks.targetFromActivity({ linked: false, goings: 1, wins: 0 }), 'woodling');
+  assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 0, wins: 0 }), 'prospector');
+  assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 8, wins: 0 }), 'ranger');
+  assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 8, wins: 1 }), 'dragonbane');
+  assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 30, wins: 0 }), 'guardian');
+  const command = loaded.find(c => c.json.name === 'rank');
+  assert(command, 'missing /rank');
+  const subs = (command.json.options || []).map(o => o.name);
+  for (const name of ['set', 'clear', 'who']) assert(subs.includes(name), `missing /rank ${name}`);
 });
 
 check('mod is staff-only with kick timeout ban purge', () => {
