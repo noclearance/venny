@@ -1,18 +1,21 @@
 // Outbound hub ingest. No-op without BOT_SECRET. Never throws into Discord commands.
 
-const DEFAULT_BASE = 'https://ais-dev-a4ljbswi2bmxa7yw7w7wwz-641223815059.us-east1.run.app/api/bot';
+const DEFAULT_BASE = 'https://misclickerz.ai.studio/api/bot';
 const TIMEOUT_MS = 8000;
 const MAX_BODY = 80_000;
 
+// Hub docs: POST /api/bot/webhook (universal) and POST /api/bot/misclick.
 const ROUTES = {
   webhook: '/webhook',
   misclick: '/misclick',
-  drop: '/drop',
-  sync: '/sync',
+  drop: '/webhook',
+  sync: '/webhook',
 };
 
 function baseUrl() {
-  return (process.env.AIS_BOT_URL || DEFAULT_BASE).replace(/\/+$/, '');
+  let url = (process.env.AIS_BOT_URL || DEFAULT_BASE).replace(/\/+$/, '');
+  if (!/\/api\/bot$/i.test(url)) url = `${url}/api/bot`;
+  return url;
 }
 
 function secret() {
@@ -106,4 +109,5 @@ module.exports = {
   ingestIncoming,
   classifyHook,
   baseUrl,
+  ROUTES,
 };

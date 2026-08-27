@@ -256,6 +256,15 @@ check('sotw start uses one WOM attach path', () => {
 });
 
 const { joinDescription, make } = require('../src/services/cards');
+check('hub ingest uses X-Venny-Secret and /api/bot/webhook', () => {
+  const hub = require('../src/services/aisBot');
+  assert.strictEqual(hub.baseUrl(), 'https://misclickerz.ai.studio/api/bot');
+  assert.strictEqual(hub.ROUTES.drop, '/webhook');
+  assert.strictEqual(hub.ROUTES.misclick, '/misclick');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/aisBot.js'), 'utf8');
+  assert(src.includes("'X-Venny-Secret'"));
+});
+
 check('sync-rank Bearer is not the Discord token', () => {
   const api = require('../src/services/api');
   assert.strictEqual(api.readBearer({ headers: { authorization: 'Bearer abc' } }), 'abc');
