@@ -20,6 +20,7 @@ const COLORS = {
   danger: 0x9F1239,
   info: 0x0E7490,
   muted: 0x44403C,
+  achieve: 0xB45309,
 };
 
 const CATEGORY_ICONS = {
@@ -167,6 +168,7 @@ const KIND_FACE = {
   danger: { tag: 'Bossing' },
   info: { tag: 'Look-up' },
   muted: { tag: 'Note' },
+  achieve: { tag: 'Clan milestone' },
 };
 
 const KIND_THUMB = {

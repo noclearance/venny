@@ -65,11 +65,31 @@ async function recent(guildId, userId = null, limit = 15) {
   return await db.prepare('SELECT * FROM achievements WHERE guild_id = ? ORDER BY id DESC LIMIT ?').all(guildId, limit);
 }
 
+const FACE = {
+  kc: 'danger',
+  99: 'achieve',
+  120: 'achieve',
+  clog: 'achieve',
+  cape: 'achieve',
+};
+
+function thumbFor(item) {
+  const metric = String(item.key || '').split(':')[1] || '';
+  if (item.kind === 'kc') {
+    const file = prettyMetric(metric).replace(/ /g, '_');
+    return `https://oldschool.runescape.wiki/images/${encodeURIComponent(file)}.png`;
+  }
+  if (item.kind === 'clog') return 'https://oldschool.runescape.wiki/images/Collection_log.png';
+  if (item.kind === 'cape') return 'https://oldschool.runescape.wiki/images/Max_cape.png';
+  return theme.skillIconUrl(metric || 'overall');
+}
+
 function embedFor(item, userTag) {
-  return theme.embed('sotw', {
+  const kind = FACE[item.kind] || 'achieve';
+  return theme.embed(kind, {
     title: item.title,
     description: `${userTag || item.rsn} just hit **${item.title}**.`,
-    thumbnail: item.kind === 'kc' ? theme.skillIconUrl('slayer') : theme.skillIconUrl(item.key.split(':')[1] || 'overall'),
+    thumbnail: thumbFor(item),
   });
 }
 

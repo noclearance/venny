@@ -393,6 +393,16 @@ check('joinDescription skips duplicate notes', () => {
     assert(prize.value.includes('50m'), prize.value);
   });
 
+  check('kc milestone is not branded as SOTW', () => {
+    const { embedFor } = require('../src/services/achievements');
+    const kc = embedFor({ title: '2500 Nex KC', kind: 'kc', key: 'kc:nex:2500', rsn: 'thuggerszn' }, '<@1>').toJSON();
+    const kcText = JSON.stringify(kc);
+    assert(!/Skill of the Week/i.test(kcText), kcText);
+    assert(/Bossing/.test(kcText), kcText);
+    const ninety = embedFor({ title: '99 Agility', kind: '99', key: '99:agility', rsn: 'x' }, '<@1>').toJSON();
+    assert(!/Skill of the Week/i.test(JSON.stringify(ninety)), JSON.stringify(ninety));
+  });
+
   if (failures.length) {
     console.error(`\n${failures.length} failure(s)`);
     process.exit(1);

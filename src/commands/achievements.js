@@ -28,7 +28,7 @@ module.exports = {
     }
 
     await interaction.reply({
-      embeds: [theme.embed('sotw', {
+      embeds: [theme.embed('achieve', {
         title: target ? `Flags · ${target.username}` : 'Recent clan flags',
         description: rows.map(r => {
           const when = r.earned_at ? `<t:${Math.floor(new Date(r.earned_at).getTime() / 1000)}:R>` : '';
