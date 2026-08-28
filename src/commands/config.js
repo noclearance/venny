@@ -72,7 +72,7 @@ function buildData(settings = {}) {
         .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)))
     .addSubcommand(sub =>
       sub.setName('ranks')
-        .setDescription('Create clan ranks, paint colors and emblems, and check Venny sits above them'));
+        .setDescription('Create clan ranks and write colors onto the Discord roles'));
 
   for (const slot of missingChannelSlots(settings)) {
     cmd.addSubcommand(sub =>
@@ -194,7 +194,7 @@ module.exports = {
           title: 'Clan ranks',
           description: [
             ranks.formatReport(report),
-            'Run this again anytime to re-paint colors and emblems. Hub can still assign (`POST /api/sync-rank` with `{ discord_id, rank }`).',
+            'Open Server Settings → Roles — each rank should have its color swatch. Hub can still assign (`POST /api/sync-rank` with `{ discord_id, rank }`).',
           ].join('\n\n'),
         })],
         flags: 64,

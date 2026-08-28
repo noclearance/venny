@@ -1,4 +1,5 @@
 const { PermissionFlagsBits } = require('discord.js');
+const { Routes } = require('discord-api-types/v10');
 const { getDb } = require('../db/database');
 
 const ORDER = [
@@ -137,9 +138,17 @@ function displayName(base, style, withIcon) {
   return `${emoji} ${base}`;
 }
 
+function colorOf(role) {
+  const n = role?.colors?.primaryColor ?? role?.color;
+  return Number.isFinite(Number(n)) ? Number(n) : 0;
+}
+
 function sameColor(role, color) {
-  const have = role?.colors?.primaryColor ?? role?.color;
-  return Number(have) === Number(color);
+  return colorOf(role) === Number(color);
+}
+
+function hexOf(color) {
+  return `#${Number(color || 0).toString(16).padStart(6, '0').toUpperCase()}`;
 }
 
 function sameEmoji(have, want) {
@@ -198,37 +207,95 @@ async function inspect(guild) {
   };
 }
 
-function stylePatch(role, key, { withIcon }) {
+function styleBody(role, key, { withIcon }) {
   const style = STYLE[key];
   const base = clanRankNames()[key];
   const wantName = displayName(base, style, withIcon);
-  const patch = {};
-  if (role.name !== wantName) patch.name = wantName;
-  if (!sameColor(role, style.color)) patch.colors = { primaryColor: style.color };
-  if (role.hoist !== true) patch.hoist = true;
-  if (role.mentionable) patch.mentionable = false;
-  if (withIcon) {
-    if (!sameEmoji(role.unicodeEmoji, style.emoji)) patch.unicodeEmoji = style.emoji;
-  } else if (role.unicodeEmoji) {
-    patch.unicodeEmoji = null;
-  }
-  return patch;
+  const body = {
+    color: style.color,
+    colors: {
+      primary_color: style.color,
+      secondary_color: null,
+      tertiary_color: null,
+    },
+    hoist: true,
+    mentionable: false,
+  };
+  if (role.name !== wantName) body.name = wantName;
+  if (withIcon) body.unicode_emoji = style.emoji;
+  else if (role.unicodeEmoji) body.unicode_emoji = null;
+  return { body, wantName, style };
 }
 
-async function paintRole(role, key, { withIcon }) {
-  const patch = stylePatch(role, key, { withIcon });
-  if (!Object.keys(patch).length) return { changed: false, iconFail: false };
-  try {
-    await role.edit({ ...patch, reason: 'Venny clan rank style' });
-    return { changed: true, iconFail: false };
-  } catch (err) {
-    if (patch.unicodeEmoji === undefined) throw err;
-    delete patch.unicodeEmoji;
-    if (Object.keys(patch).length) {
-      await role.edit({ ...patch, reason: 'Venny clan rank color' });
-    }
-    return { changed: true, iconFail: true };
+function alreadyStyled(role, key, { withIcon }) {
+  const style = STYLE[key];
+  const wantName = displayName(clanRankNames()[key], style, withIcon);
+  if (!sameColor(role, style.color)) return false;
+  if (role.hoist !== true) return false;
+  if (role.mentionable) return false;
+  if (role.name !== wantName) return false;
+  if (withIcon) return sameEmoji(role.unicodeEmoji, style.emoji);
+  return !role.unicodeEmoji;
+}
+
+async function paintRole(role, key, { withIcon, force = false }) {
+  const guild = role.guild;
+  const me = guild.members.me;
+  if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+    return { changed: false, error: 'Venny needs Manage Roles' };
   }
+  if (me.roles.highest.comparePositionTo(role) <= 0) {
+    return { changed: false, error: 'above Venny — I cannot set its Discord color' };
+  }
+  if (!force && alreadyStyled(role, key, { withIcon })) {
+    return { changed: false };
+  }
+
+  const { body } = styleBody(role, key, { withIcon });
+  const patch = async (payload) => {
+    await guild.client.rest.patch(Routes.guildRole(guild.id, role.id), {
+      body: payload,
+      reason: 'Venny clan rank color',
+    });
+  };
+
+  try {
+    await patch(body);
+    return { changed: true };
+  } catch (err) {
+    if (body.unicode_emoji === undefined) {
+      return { changed: false, error: err.message };
+    }
+    const fallback = { ...body };
+    delete fallback.unicode_emoji;
+    try {
+      await patch(fallback);
+      return { changed: true, iconFail: true };
+    } catch (err2) {
+      return { changed: false, error: err2.message };
+    }
+  }
+}
+
+async function paintExisting(guild) {
+  await guild.roles.fetch();
+  const names = clanRankNames();
+  const withIcon = canUseRoleIcons(guild);
+  const painted = [];
+  const failed = [];
+  const iconFail = [];
+  for (const key of ORDER) {
+    const name = names[key];
+    const role = findNamed(guild, name);
+    if (!role) continue;
+    const out = await paintRole(role, key, { withIcon, force: false });
+    if (out.changed) painted.push(name);
+    if (out.iconFail) iconFail.push(name);
+    if (out.error) failed.push(`${name}: ${out.error}`);
+  }
+  if (painted.length) console.log(`rank color ${guild.name}: ${painted.join(', ')}`);
+  if (failed.length) console.warn(`rank color ${guild.name}: ${failed.join('; ')}`);
+  return { painted, failed, iconFail, withIcon };
 }
 
 async function ensure(guild) {
@@ -238,6 +305,7 @@ async function ensure(guild) {
   const created = [];
   const painted = [];
   const iconFail = [];
+  const failed = [];
   for (const key of ORDER) {
     const name = names[key];
     const style = STYLE[key];
@@ -245,7 +313,7 @@ async function ensure(guild) {
     if (!role) {
       const opts = {
         name: displayName(name, style, withIcon),
-        colors: { primaryColor: style.color },
+        color: style.color,
         hoist: true,
         mentionable: false,
         reason: 'Venny clan rank',
@@ -254,37 +322,51 @@ async function ensure(guild) {
       try {
         role = await guild.roles.create(opts);
       } catch (err) {
-        if (!withIcon || !opts.unicodeEmoji) throw err;
+        if (!opts.unicodeEmoji) {
+          failed.push(`${name}: ${err.message}`);
+          continue;
+        }
         delete opts.unicodeEmoji;
-        role = await guild.roles.create(opts);
-        iconFail.push(name);
+        try {
+          role = await guild.roles.create(opts);
+          iconFail.push(name);
+        } catch (err2) {
+          failed.push(`${name}: ${err2.message}`);
+          continue;
+        }
       }
       created.push(name);
-      continue;
     }
-    const out = await paintRole(role, key, { withIcon });
+    const out = await paintRole(role, key, { withIcon, force: true });
     if (out.changed) painted.push(name);
     if (out.iconFail) iconFail.push(name);
+    if (out.error) failed.push(`${name}: ${out.error}`);
   }
   const report = await inspect(guild);
-  return { ...report, created, painted, withIcon, iconFail };
+  return { ...report, created, painted, withIcon, iconFail, failed };
 }
 
 function formatReport(report) {
   const lines = report.rows.map(row => {
     const badge = STYLE[row.key]?.emoji ? `${STYLE[row.key].emoji} ` : '';
     if (!row.role) return `${badge}**${row.name}** — missing`;
-    const place = row.above ? 'Venny is above it' : 'Venny is below or equal — drag Venny up';
+    const have = hexOf(colorOf(row.role));
+    const want = hexOf(STYLE[row.key].color);
+    const colorBit = have === want ? `Discord color ${have}` : `Discord color ${have} (want ${want})`;
+    const place = row.above ? 'Venny is above it' : 'Venny is below it — cannot paint until you drag Venny up';
     const emblem = row.role.unicodeEmoji
       ? `emblem ${row.role.unicodeEmoji}`
       : (STYLE[row.key]?.emoji ? `emblem in the name` : 'no emblem');
-    return `${badge}**${row.name}** — <@&${row.role.id}> · ${emblem} · ${place}`;
+    return `${badge}**${row.name}** — <@&${row.role.id}> · ${colorBit} · ${emblem} · ${place}`;
   });
   const created = report.created?.length
     ? `Created: ${report.created.map(n => `**${n}**`).join(', ')}`
     : null;
   const painted = report.painted?.length
-    ? `Painted: ${report.painted.map(n => `**${n}**`).join(', ')}`
+    ? `Wrote Discord role color on: ${report.painted.map(n => `**${n}**`).join(', ')}`
+    : null;
+  const failed = report.failed?.length
+    ? `Could not color: ${report.failed.join('; ')}`
     : null;
   const manage = report.canManage
     ? 'Manage Roles: yes'
@@ -297,9 +379,21 @@ function formatReport(report) {
     : null;
   const stuck = report.rows.some(row => row.role && row.above === false);
   const hint = stuck
-    ? 'Server Settings → Roles → drag **Venny** above the clan ranks.'
+    ? 'Server Settings → Roles → drag **Venny** above the clan ranks, then run this again. I cannot change a role’s color if that role sits above me.'
     : null;
-  return [created, painted, manage, icons, iconFail, `My highest role: **${report.botRoleName}**`, '', ...lines, hint].filter(v => v !== null && v !== undefined).join('\n');
+  return [
+    'This writes the color onto the Discord role itself (Server Settings → Roles), not just this message.',
+    created,
+    painted,
+    failed,
+    manage,
+    icons,
+    iconFail,
+    `My highest role: **${report.botRoleName}**`,
+    '',
+    ...lines,
+    hint,
+  ].filter(v => v !== null && v !== undefined).join('\n');
 }
 
 async function applyRank(client, guildId, userId, rank, { reason, exclusive = true, extraStrip } = {}) {
@@ -436,6 +530,8 @@ module.exports = {
   labelFor,
   canUseRoleIcons,
   displayName,
+  hexOf,
+  paintExisting,
   findNamed,
   clanRankRoleIds,
   currentKey,

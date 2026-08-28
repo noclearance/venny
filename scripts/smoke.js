@@ -93,6 +93,8 @@ check('rank ladder and auto thresholds', () => {
   assert.strictEqual(ranks.nameMatches('Prospector', 'Woodling'), false);
   assert.strictEqual(ranks.displayName('Woodling', ranks.STYLE.woodling, false), '🪵 Woodling');
   assert.strictEqual(ranks.displayName('Woodling', ranks.STYLE.woodling, true), 'Woodling');
+  assert.strictEqual(ranks.hexOf(0xB8894A), '#B8894A');
+  assert.strictEqual(ranks.hexOf(0), '#000000');
   const command = loaded.find(c => c.json.name === 'rank');
   assert(command, 'missing /rank');
   const subs = (command.json.options || []).map(o => o.name);

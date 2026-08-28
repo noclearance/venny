@@ -17,5 +17,11 @@ module.exports = {
     registerCommands(readyClient).catch(err => {
       console.warn(`Slash command sync on ready: ${err.message}`);
     });
+    const ranks = require('../services/ranks');
+    for (const guild of readyClient.guilds.cache.values()) {
+      ranks.paintExisting(guild).catch(err => {
+        console.warn(`rank color ${guild.name}: ${err.message}`);
+      });
+    }
   },
 };

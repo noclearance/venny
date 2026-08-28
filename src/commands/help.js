@@ -64,7 +64,7 @@ module.exports = {
         staff.push('`/raffle create` needs **hours** (or `until`)');
       }
       if (isAdmin(interaction.member)) {
-        staff.push('`/config ranks` — create Woodling→Ascendant, check Venny’s height');
+        staff.push('`/config ranks` — create Woodling→Ascendant and write their Discord role colors');
         if (missing.length) {
           staff.unshift(`Finish setup: ${missing.map(s => `\`/config ${s.sub}\``).join(' · ')}`);
         } else {
