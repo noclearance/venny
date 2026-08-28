@@ -277,6 +277,77 @@ async function paintRole(role, key, { withIcon, force = false }) {
   }
 }
 
+function assignStackPositions(current) {
+  return [...current].sort((a, b) => a - b);
+}
+
+function slotOf(role) {
+  return Number(role.rawPosition ?? role.position ?? 0);
+}
+
+function alreadyStacked(roles) {
+  for (let i = 1; i < roles.length; i++) {
+    if (slotOf(roles[i]) <= slotOf(roles[i - 1])) return false;
+  }
+  return roles.length > 0;
+}
+
+async function orderLadder(guild) {
+  const me = guild.members.me;
+  if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+    return { ordered: false, reason: 'no Manage Roles' };
+  }
+  const highest = me.roles.highest;
+  const names = clanRankNames();
+  const roles = ORDER.map(key => findNamed(guild, names[key])).filter(Boolean);
+  const movable = roles.filter(r => highest && highest.comparePositionTo(r) > 0);
+  const stuck = roles.filter(r => !highest || highest.comparePositionTo(r) <= 0).map(r => r.name);
+  if (movable.length < 2) {
+    return {
+      ordered: false,
+      already: movable.length === 1,
+      reason: stuck.length ? 'ranks sit above Venny' : (movable.length ? 'only one rank' : 'no ranks'),
+      stuck,
+    };
+  }
+  if (alreadyStacked(movable)) {
+    return { ordered: false, already: true, stuck };
+  }
+  const slots = assignStackPositions(movable.map(slotOf));
+  const payload = movable.map((role, i) => ({ role: role.id, position: slots[i] }));
+  try {
+    await guild.roles.setPositions(payload);
+    return { ordered: true, stuck };
+  } catch (err) {
+    console.warn(`rank order: ${err.message}`);
+    return { ordered: false, reason: err.message, stuck };
+  }
+}
+
+async function createRank(guild, key, withIcon) {
+  const name = clanRankNames()[key];
+  const style = STYLE[key];
+  const opts = {
+    name: displayName(name, style, withIcon),
+    color: style.color,
+    hoist: true,
+    mentionable: false,
+    reason: 'Venny clan rank',
+  };
+  if (withIcon) opts.unicodeEmoji = style.emoji;
+  try {
+    return { role: await guild.roles.create(opts), iconFail: false };
+  } catch (err) {
+    if (!opts.unicodeEmoji) return { error: err.message };
+    delete opts.unicodeEmoji;
+    try {
+      return { role: await guild.roles.create(opts), iconFail: true };
+    } catch (err2) {
+      return { error: err2.message };
+    }
+  }
+}
+
 async function paintExisting(guild) {
   await guild.roles.fetch();
   const names = clanRankNames();
@@ -293,9 +364,12 @@ async function paintExisting(guild) {
     if (out.iconFail) iconFail.push(name);
     if (out.error) failed.push(`${name}: ${out.error}`);
   }
+  const stack = await orderLadder(guild);
   if (painted.length) console.log(`rank color ${guild.name}: ${painted.join(', ')}`);
+  if (stack.ordered) console.log(`rank order ${guild.name}: Woodling bottom → Ascendant top`);
   if (failed.length) console.warn(`rank color ${guild.name}: ${failed.join('; ')}`);
-  return { painted, failed, iconFail, withIcon };
+  if (stack.reason && !stack.already) console.warn(`rank order ${guild.name}: ${stack.reason}`);
+  return { painted, failed, iconFail, withIcon, stack };
 }
 
 async function ensure(guild) {
@@ -306,44 +380,30 @@ async function ensure(guild) {
   const painted = [];
   const iconFail = [];
   const failed = [];
+  // Highest first so a fresh create does not leave Woodling on top.
+  for (const key of [...ORDER].reverse()) {
+    const name = names[key];
+    if (findNamed(guild, name)) continue;
+    const made = await createRank(guild, key, withIcon);
+    if (made.error) {
+      failed.push(`${name}: ${made.error}`);
+      continue;
+    }
+    if (made.iconFail) iconFail.push(name);
+    created.push(name);
+  }
   for (const key of ORDER) {
     const name = names[key];
-    const style = STYLE[key];
-    let role = findNamed(guild, name);
-    if (!role) {
-      const opts = {
-        name: displayName(name, style, withIcon),
-        color: style.color,
-        hoist: true,
-        mentionable: false,
-        reason: 'Venny clan rank',
-      };
-      if (withIcon) opts.unicodeEmoji = style.emoji;
-      try {
-        role = await guild.roles.create(opts);
-      } catch (err) {
-        if (!opts.unicodeEmoji) {
-          failed.push(`${name}: ${err.message}`);
-          continue;
-        }
-        delete opts.unicodeEmoji;
-        try {
-          role = await guild.roles.create(opts);
-          iconFail.push(name);
-        } catch (err2) {
-          failed.push(`${name}: ${err2.message}`);
-          continue;
-        }
-      }
-      created.push(name);
-    }
+    const role = findNamed(guild, name);
+    if (!role) continue;
     const out = await paintRole(role, key, { withIcon, force: true });
     if (out.changed) painted.push(name);
     if (out.iconFail) iconFail.push(name);
     if (out.error) failed.push(`${name}: ${out.error}`);
   }
+  const stack = await orderLadder(guild);
   const report = await inspect(guild);
-  return { ...report, created, painted, withIcon, iconFail, failed };
+  return { ...report, created, painted, withIcon, iconFail, failed, stack };
 }
 
 function formatReport(report) {
@@ -379,13 +439,27 @@ function formatReport(report) {
     : null;
   const stuck = report.rows.some(row => row.role && row.above === false);
   const hint = stuck
-    ? 'Server Settings → Roles → drag **Venny** above the clan ranks, then run this again. I cannot change a role’s color if that role sits above me.'
+    ? 'Server Settings → Roles → drag **Venny** above the clan ranks, then run this again. I cannot change a role’s color or order if that role sits above me.'
+    : null;
+  const orderLine = report.stack?.ordered
+    ? 'Restacked Server Settings → Roles: **Woodling** at the bottom, **Ascendant** at the top.'
+    : report.stack?.already
+      ? 'Role order: Woodling (bottom) → Ascendant (top).'
+      : null;
+  const orderFail = report.stack?.reason && !report.stack.already
+    ? `Could not restack: ${report.stack.reason}`
+    : null;
+  const stuckAbove = report.stack?.stuck?.length
+    ? `Still above me so I could not move: ${report.stack.stuck.map(n => `**${n}**`).join(', ')}`
     : null;
   return [
     'This writes the color onto the Discord role itself (Server Settings → Roles), not just this message.',
     created,
     painted,
     failed,
+    orderLine,
+    orderFail,
+    stuckAbove,
     manage,
     icons,
     iconFail,
@@ -531,6 +605,7 @@ module.exports = {
   canUseRoleIcons,
   displayName,
   hexOf,
+  assignStackPositions,
   paintExisting,
   findNamed,
   clanRankRoleIds,

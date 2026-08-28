@@ -95,6 +95,14 @@ check('rank ladder and auto thresholds', () => {
   assert.strictEqual(ranks.displayName('Woodling', ranks.STYLE.woodling, true), 'Woodling');
   assert.strictEqual(ranks.hexOf(0xB8894A), '#B8894A');
   assert.strictEqual(ranks.hexOf(0), '#000000');
+  assert.deepStrictEqual(
+    ranks.assignStackPositions([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  );
+  assert.deepStrictEqual(
+    ranks.assignStackPositions([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  );
   const command = loaded.find(c => c.json.name === 'rank');
   assert(command, 'missing /rank');
   const subs = (command.json.options || []).map(o => o.name);
