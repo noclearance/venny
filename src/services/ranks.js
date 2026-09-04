@@ -104,8 +104,7 @@ function resolveKey(rank) {
 
 function discordNameForRank(rank) {
   const key = resolveKey(rank);
-  if (key) return clanRankNames()[key];
-  return String(rank || '').trim();
+  return key ? clanRankNames()[key] : '';
 }
 
 function nameMatches(roleName, want) {

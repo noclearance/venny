@@ -471,8 +471,20 @@ async function initDb() {
   await migrateColumn(db, 'botw', 'prize', 'TEXT');
   await migrateColumn(db, 'events', 'ping_mode', "TEXT DEFAULT 'category'");
   await migrateColumn(db, 'events', 'ping_role_id', 'TEXT');
+  await migrateColumn(db, 'sotw', 'finalize_error', 'TEXT');
+  await migrateColumn(db, 'economy_ledger', 'ref_id', 'TEXT');
+  await tryExec(db, 'CREATE UNIQUE INDEX IF NOT EXISTS sotw_winners_sotw_id ON sotw_winners(sotw_id)');
+  await tryExec(db, 'CREATE UNIQUE INDEX IF NOT EXISTS economy_ledger_once ON economy_ledger(guild_id, user_id, reason, ref_id)');
 
   return db;
+}
+
+async function tryExec(db, sql) {
+  try {
+    await db.exec(sql);
+  } catch (err) {
+    console.warn(`Migration skipped (${sql.slice(0, 48)}): ${err.message}`);
+  }
 }
 
 async function migrateColumn(db, table, column, definition) {

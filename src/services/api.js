@@ -141,6 +141,8 @@ async function postAnnounce(client, body) {
 
   if (body.channel_id) {
     const channel = await client.channels.fetch(String(body.channel_id));
+    if (!channel) throw new Error('channel_id not found');
+    if (String(channel.guild?.id || '') !== guildId) throw new Error('channel_id is not in this guild');
     const sent = await channel.send({
       embeds: [theme.embed('brand', { title, description, timestamp: true })],
     });
@@ -219,6 +221,7 @@ async function syncRank(client, body) {
     const guild = await client.guilds.fetch(guildId);
     name = (await resolveRole(guild, body)).name;
   }
+  if (!ranks.resolveKey(name)) throw new Error('unknown clan rank');
   return ranks.applyRank(client, guildId, userId, name, {
     reason: body.reason || 'Hub rank sync',
     exclusive: body.exclusive !== false,

@@ -105,7 +105,8 @@ async function kcBoard(settings, botw) {
 
 async function finalizeBotw(client, botw) {
   const db = getDb();
-  if (Number(botw.ended)) return;
+  const claimed = await db.prepare('UPDATE botw SET ended = 1 WHERE id = ? AND ended = 0').run(botw.id);
+  if (!claimed.changes) return { skipped: true };
   const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(botw.guild_id);
   let rows = [];
   try {
@@ -138,21 +139,18 @@ async function finalizeBotw(client, botw) {
   const channel = await client.channels.fetch(botw.channel_id);
   const posted = await channel.send({ embeds: [made.embed] });
   const cards = require('./cards');
-  cards.flavorLater(posted, made.flavor);
-  await cards.publish(client, botw.guild_id, {
+  const announced = await cards.publish(client, botw.guild_id, {
     kind: 'danger',
     json: made.json,
     fields,
     sourceChannelId: posted.channelId,
     sourceMessageId: posted.id,
   });
-
-  const claimed = await db.prepare('UPDATE botw SET ended = 1 WHERE id = ? AND ended = 0').run(botw.id);
-  if (!claimed.changes) return;
+  cards.flavorLater(posted, made.flavor, announced);
   if (winnerRsn) {
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(botw.guild_id, winnerRsn);
     if (winner) {
-      await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client);
+      await require('./economy').award(botw.guild_id, winner.user_id, 'botw_win', client, botw.id);
       require('./ranks').maybePromote(client, botw.guild_id, winner.user_id);
     }
   }

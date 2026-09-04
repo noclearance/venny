@@ -374,6 +374,18 @@ async function initPostgres(db) {
   await migrateColumn(db, 'botw', 'prize', 'TEXT');
   await migrateColumn(db, 'events', 'ping_mode', "TEXT DEFAULT 'category'");
   await migrateColumn(db, 'events', 'ping_role_id', 'TEXT');
+  await migrateColumn(db, 'sotw', 'finalize_error', 'TEXT');
+  await migrateColumn(db, 'economy_ledger', 'ref_id', 'TEXT');
+  try {
+    await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sotw_winners_sotw_id ON sotw_winners (sotw_id)');
+  } catch (err) {
+    console.warn(`sotw_winners unique: ${err.message}`);
+  }
+  try {
+    await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS economy_ledger_once ON economy_ledger (guild_id, user_id, reason, ref_id)');
+  } catch (err) {
+    console.warn(`economy_ledger unique: ${err.message}`);
+  }
 }
 
 module.exports = { wrapPg, initPostgres, getPool };

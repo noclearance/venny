@@ -17,12 +17,28 @@ function shimReply(interaction) {
   interaction.reply = options => {
     if (interaction.deferred && !interaction.replied) {
       const payload = typeof options === 'string' ? { content: options } : { ...options };
-      delete payload.flags;
-      delete payload.ephemeral;
       delete payload.fetchReply;
       return interaction.editReply(payload);
     }
     return origReply(options);
+  };
+}
+
+function publicize(interaction) {
+  const origEdit = interaction.editReply.bind(interaction);
+  let cleared = false;
+  interaction.editReply = async options => {
+    const payload = typeof options === 'string' ? { content: options } : { ...options };
+    const keepPrivate = payload.flags === 64 || payload.ephemeral;
+    delete payload.flags;
+    delete payload.ephemeral;
+    delete payload.fetchReply;
+    if (keepPrivate) return origEdit(payload);
+    if (!cleared) {
+      cleared = true;
+      await origEdit({ content: 'Sent.' }).catch(() => {});
+    }
+    return interaction.followUp(payload);
   };
 }
 
@@ -57,10 +73,11 @@ module.exports = {
         const sub = interaction.options.getSubcommand(false);
         const isPublic = Boolean(command.publicCommand || (sub && command.publicSubs?.includes(sub)));
         if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferReply(isPublic ? {} : { flags: 64 });
+          await interaction.deferReply({ flags: 64 });
         }
         shimReply(interaction);
         if (!(await assertCommandAccess(interaction, command))) return;
+        if (isPublic) publicize(interaction);
         if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         await command.execute(interaction);
       } catch (err) {
