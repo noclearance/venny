@@ -70,9 +70,10 @@ check('lookups nested under me and clan', () => {
   }
 });
 
-check('vote hidden from members', () => {
+check('vote results visible to members', () => {
   const vote = loaded.find(c => c.json.name === 'vote');
-  assert(vote.json.default_member_permissions, 'vote missing default_member_permissions');
+  assert(!vote.json.default_member_permissions, 'vote still hidden from members');
+  assert(vote.adminSubs.includes('sotw') && vote.adminSubs.includes('cancel'));
 });
 
 check('rank ladder and auto thresholds', () => {
@@ -81,6 +82,8 @@ check('rank ladder and auto thresholds', () => {
   assert.strictEqual(ranks.resolveKey('Trial'), 'woodling');
   assert.strictEqual(ranks.resolveKey('Member'), 'prospector');
   assert.strictEqual(ranks.discordNameForRank('ranger'), 'Ranger');
+  assert.strictEqual(ranks.discordNameForRank('not-a-rank'), '');
+  assert.strictEqual(ranks.resolveKey('Admin'), 'ascendant');
   assert.strictEqual(ranks.targetFromActivity({ linked: false, goings: 1, wins: 0 }), 'woodling');
   assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 0, wins: 0 }), 'prospector');
   assert.strictEqual(ranks.targetFromActivity({ linked: true, goings: 8, wins: 0 }), 'ranger');
@@ -112,7 +115,7 @@ check('rank ladder and auto thresholds', () => {
 check('mod is staff-only with kick timeout ban purge', () => {
   const command = loaded.find(c => c.json.name === 'mod');
   assert(command, 'missing /mod');
-  assert(command.json.default_member_permissions, 'mod visible to everyone');
+  assert.strictEqual(String(command.json.default_member_permissions ?? '0'), '0');
   const subs = (command.json.options || []).map(o => o.name);
   for (const name of ['timeout', 'untimeout', 'kick', 'ban', 'unban', 'purge']) {
     assert(subs.includes(name), `missing /mod ${name}`);
@@ -162,12 +165,15 @@ check('raffle has end and draw', () => {
   const optNames = (create.options || []).map(o => o.name);
   assert(optNames.includes('prize'), 'raffle create missing prize');
   assert(!optNames.includes('description'), 'raffle create still has description');
+  const hours = (create.options || []).find(o => o.name === 'hours');
+  assert(hours && !hours.required, 'raffle hours should be optional (hours OR until)');
 });
 
 check('sotw staff subs', () => {
   for (const name of ['start', 'end', 'update', 'cancel', 'prize']) {
     assert(sotw.staffSubs.includes(name), `staffSubs missing ${name}`);
   }
+  assert(!sotw.publicSubs.includes('cancel'), 'sotw cancel still public');
 });
 
 const { statusOf, pickLiveCompetition } = require('../src/services/sotw');
@@ -399,6 +405,39 @@ check('joinDescription skips duplicate notes', () => {
     const prize = (card.embed.data.fields || []).find(f => f.name === 'Prize');
     assert(prize, 'missing Prize field');
     assert(prize.value.includes('50m'), prize.value);
+  });
+
+  check('flavor fallback when no key', () => {
+    const card = flavor.venny('event_start', { title: 'ToB' });
+    assert.strictEqual(card.source, 'venny');
+    assert(card.title);
+  });
+
+  check('EST is fixed UTC-5 not New York DST', () => {
+    const { parseInZone } = require('../src/services/timezone');
+    const d = parseInZone('2026-01-15 19:00 EST', 'UTC');
+    assert(d, 'EST parse failed');
+    assert.strictEqual(d.getUTCHours(), 0);
+  });
+
+  check('undated month-day rolls to the next future occurrence', () => {
+    const { DateTime } = require('luxon');
+    const { parseInZone } = require('../src/services/timezone');
+    const past = DateTime.now().minus({ days: 40 }).toFormat('MMM d h:mm a');
+    const d = parseInZone(past, 'UTC');
+    assert(d && d.getTime() > Date.now(), `expected future, got ${d}`);
+  });
+
+  check('maxed requires sailing 99', () => {
+    const { parsePlayer } = require('../src/osrs/snapshot');
+    const { SKILLS } = require('../src/services/wom');
+    const skills = { overall: { level: 2277, experience: 1 } };
+    for (const s of SKILLS.filter(x => x !== 'overall' && x !== 'sailing')) {
+      skills[s] = { level: 99, experience: 13034431 };
+    }
+    skills.sailing = { level: 1, experience: 0 };
+    const parsed = parsePlayer({ latestSnapshot: { data: { skills, bosses: {}, activities: {} } } });
+    assert.strictEqual(parsed.maxed, false);
   });
 
   check('kc milestone is not branded as SOTW', () => {

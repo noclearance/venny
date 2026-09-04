@@ -13,7 +13,7 @@ const MASS_CHOICES = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('subscribe')
-    .setDescription('Pings for calendar masses — not SOTW or BOTW')
+    .setDescription('Pings for masses, SOTW, and BOTW')
     .addSubcommand(sub =>
       sub.setName('add')
         .setDescription('Subscribe to a mass category')
@@ -21,7 +21,11 @@ module.exports = {
           opt.setName('category')
             .setDescription('Which mass type to subscribe to')
             .setRequired(true)
-            .addChoices(...MASS_CHOICES)))
+            .addChoices(
+              ...MASS_CHOICES,
+              { name: 'Skill of the Week', value: 'sotw' },
+              { name: 'Boss of the Week', value: 'botw' },
+            )))
     .addSubcommand(sub =>
       sub.setName('remove')
         .setDescription('Unsubscribe from a category')

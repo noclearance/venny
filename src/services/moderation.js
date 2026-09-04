@@ -9,10 +9,12 @@ const ACTION_PERM = {
   purge: PermissionFlagsBits.ManageMessages,
 };
 
-const SEE_MOD = PermissionFlagsBits.KickMembers
-  | PermissionFlagsBits.BanMembers
-  | PermissionFlagsBits.ModerateMembers
-  | PermissionFlagsBits.ManageMessages;
+const SEE_MOD = 0n;
+
+function canSeeMod(member) {
+  if (!member?.permissions) return false;
+  return Object.values(ACTION_PERM).some(bit => member.permissions.has(bit));
+}
 
 const DURATIONS = {
   '5m': 5 * 60 * 1000,
@@ -24,9 +26,7 @@ const DURATIONS = {
   '28d': 28 * 24 * 60 * 60 * 1000,
 };
 
-function canSeeMod(member) {
-  return Boolean(member?.permissions?.has(SEE_MOD));
-}
+
 
 function clipReason(value) {
   return String(value || '').trim().slice(0, 400);

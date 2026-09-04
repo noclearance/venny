@@ -42,7 +42,7 @@ module.exports = {
         '`/event list` · `/subscribe add`',
       ].join('\n')),
       theme.field('Raffle / bingo', [
-        '`/raffle create prize:` · `/draw` · `/end`',
+        '`/raffle create prize:` · `/raffle draw` · `/raffle end`',
         '`/bingo create` · `/start` · claim a tile',
       ].join('\n')),
     ];
@@ -61,7 +61,7 @@ module.exports = {
       if (isAdmin(interaction.member) || isModerator(interaction.member)) {
         staff.push('`/sotw start` · `/end` · `/cancel`');
         staff.push('`/vote sotw` · `/vote botw` (admins — not on the member / list)');
-        staff.push('`/raffle create` needs **hours** (or `until`)');
+        staff.push('`/raffle create` needs **hours** or **until**');
       }
       if (isAdmin(interaction.member)) {
         staff.push('`/config ranks` — create Woodling→Ascendant and write their Discord role colors');

@@ -134,13 +134,11 @@ module.exports = {
         mode: pingOpts.mode,
         roleId: pingOpts.roleId,
       });
-      await interaction.editReply(result.embed
+      const posted = await interaction.editReply(result.embed
         ? { content: ping.content, embeds: [result.embed], allowedMentions: ping.allowedMentions }
         : result.response);
-      const posted = await interaction.fetchReply();
       const cards = require('../services/cards');
-      cards.flavorLater(posted, result.flavor);
-      await cards.publish(interaction.client, interaction.guildId, {
+      const announced = await cards.publish(interaction.client, interaction.guildId, {
         kind: 'sotw',
         json: result.card,
         extraLines: [result.tracking],
@@ -149,6 +147,7 @@ module.exports = {
         sourceMessageId: posted.id,
         mention: ping,
       });
+      cards.flavorLater(posted, result.flavor, announced);
       await audit(interaction.client, interaction.guildId, `SOTW #${result.sotwId} **${skill}** started by <@${interaction.user.id}>`);
       return;
     }
@@ -411,17 +410,12 @@ module.exports = {
       if (!sotw) {
         return interaction.reply({ content: 'Nothing live to cancel.', flags: 64 });
       }
-      if (sotw.wom_competition_id && settings?.wom_verif_code) {
-        try {
-          await wom.deleteCompetition(sotw.wom_competition_id, settings.wom_verif_code);
-        } catch (err) {
-          console.error('WOM delete on cancel:', err.message);
-        }
-      }
-      await db.prepare("UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?").run('Cancelled', sotw.id);
-      await db.prepare("UPDATE events SET reminder_sent = 1 WHERE guild_id = ? AND category = 'sotw' AND title LIKE ?").run(interaction.guildId, `%${sotw.skill}%`);
-      await audit(interaction.client, interaction.guildId, `SOTW #${sotw.id} (${sotw.skill}) cancelled by <@${interaction.user.id}>`);
-      return interaction.reply({ content: `SOTW **${sotw.skill}** is off. No winner. Wise Old Man competition removed if I had the code.` });
+      const row = buildConfirmationRow('sotw_cancel', String(sotw.id), interaction.user.id);
+      return interaction.reply({
+        content: `⚠️ **Cancel SOTW #${sotw.id}: ${sotw.skill.toUpperCase()}?**\nNo winner. I will delete the WOM competition if I have the code.`,
+        components: [row],
+        flags: 64,
+      });
     }
 
     // ── Update ────────────────────────────────
@@ -533,12 +527,16 @@ module.exports = {
       }
 
       if (action === 'clear') {
-        const count = await sotwQueue.clearQueue(interaction.guildId);
-        await interaction.reply({ content: `Cleared ${count} item${count === 1 ? '' : 's'} from the SOTW queue.`, flags: 64 });
+        const row = buildConfirmationRow('sotw_queue_clear', 'all', interaction.user.id);
+        await interaction.reply({
+          content: '⚠️ **Clear the SOTW queue?** This drops every queued skill.',
+          components: [row],
+          flags: 64,
+        });
         return;
       }
     }
   },
-  staffSubs: ['start', 'end', 'update', 'cancel', 'prize'],
-  publicSubs: ['start', 'cancel', 'prize'],
+  staffSubs: ['start', 'end', 'update', 'cancel', 'prize', 'queue'],
+  publicSubs: ['start', 'prize'],
 };

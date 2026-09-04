@@ -25,7 +25,6 @@ module.exports = {
         .addIntegerOption(opt =>
           opt.setName('hours')
             .setDescription('How long entries stay open (then I draw)')
-            .setRequired(true)
             .setMinValue(1)
             .setMaxValue(720))
         .addStringOption(opt =>
@@ -96,6 +95,9 @@ module.exports = {
       const ticketGp = interaction.options.getInteger('ticket_gp') ?? DEFAULT_TICKET_GP;
       const hours = interaction.options.getInteger('hours');
       const untilStr = interaction.options.getString('until');
+      if (!hours && !untilStr) {
+        return require('../services/commandFail').commandFail(interaction, 'Give **hours** or **until**.');
+      }
 
       let endsAt;
       if (untilStr) {
@@ -164,8 +166,7 @@ module.exports = {
         fetchReply: true,
       });
       const cards = require('../services/cards');
-      cards.flavorLater(reply, made.flavor);
-      await cards.publish(interaction.client, interaction.guildId, {
+      const announced = await cards.publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
         json: made.json,
         fields: [
@@ -177,6 +178,7 @@ module.exports = {
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
       });
+      cards.flavorLater(reply, made.flavor, announced);
       await audit(interaction.client, interaction.guildId, `Raffle #${raffleId} **${title}** created by <@${interaction.user.id}>`);
       return;
     }
@@ -207,19 +209,13 @@ module.exports = {
         return interaction.reply({ content: `❌ Raffle #${id} has already been drawn. Winner: <@${raffle.winner_id}>`, flags: 64 });
       }
 
-      const settled = await require('../services/raffleRun').settle(interaction.client, raffle);
-      if (settled.skipped) {
-        return interaction.reply({ content: `Raffle #${id} was already drawn.`, flags: 64 });
-      }
-      if (settled.empty) {
-        return interaction.reply({ content: `Raffle #${id} had no entries. Closed with no winner.`, flags: 64 });
-      }
-      await interaction.reply({
-        content: `Drawn. Winner is <@${settled.winner.user_id}>.`,
+      const { buildConfirmationRow } = require('../services/confirmations');
+      const row = buildConfirmationRow('raffle_draw', String(id), interaction.user.id);
+      return interaction.reply({
+        content: `⚠️ **Draw raffle #${id}: ${raffle.title}?** This picks a winner.`,
+        components: [row],
         flags: 64,
       });
-      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${settled.winner.user_id}>`);
-      return;
     }
 
     if (sub === 'end') {
@@ -239,13 +235,13 @@ module.exports = {
         });
       }
 
-      const settled = await require('../services/raffleRun').settle(interaction.client, raffle, { mode: 'close' });
-      if (settled.skipped) {
-        return interaction.reply({ content: `Raffle #${id} is already closed.`, flags: 64 });
-      }
-      await interaction.reply({ content: `Raffle #${id} **${raffle.title}** closed with no winner.`, flags: 64 });
-      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** ended by <@${interaction.user.id}> (no winner)`);
-      return;
+      const { buildConfirmationRow } = require('../services/confirmations');
+      const row = buildConfirmationRow('raffle_end', String(id), interaction.user.id);
+      return interaction.reply({
+        content: `⚠️ **Close raffle #${id}: ${raffle.title}?** No winner.`,
+        components: [row],
+        flags: 64,
+      });
     }
 
     if (sub === 'list') {

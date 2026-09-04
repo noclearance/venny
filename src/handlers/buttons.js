@@ -62,7 +62,7 @@ async function handleRaffleEnter(interaction, db) {
   }
   const raffleId = parseInt(interaction.customId.replace('raffle_enter_', ''), 10);
 
-  const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND drawn = 0').get(raffleId);
+  const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ? AND drawn = 0').get(raffleId, interaction.guildId);
   if (!raffle || !require('../services/raffleRun').stillOpen(raffle)) {
     return interaction.editReply({ content: 'This raffle is no longer active.' });
   }
@@ -74,7 +74,7 @@ async function handleRaffleEnter(interaction, db) {
 
   try {
     await db.prepare('INSERT INTO raffle_entries (raffle_id, user_id) VALUES (?, ?)').run(raffleId, interaction.user.id);
-    await require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client);
+    await require('../services/economy').award(interaction.guildId, interaction.user.id, 'raffle_enter', interaction.client, raffleId);
     const { ticketLine } = require('../commands/raffle');
     const ticketNote = raffle.ticket_gp > 0 ? `\n${ticketLine(raffle.ticket_gp)}` : '';
     await interaction.editReply({ content: `You're entered in **${raffle.title}** (${member.rsn}).${ticketNote}` });
@@ -142,11 +142,92 @@ async function handleConfirmation(interaction, db) {
     const { finalizeSotw } = require('../services/reminders');
     await finalizeSotw(interaction.client, sotw);
 
-    const sotwQueue = require('../services/sotwQueue');
-    await sotwQueue.startNextQueuedSotw(interaction.guildId, interaction.client);
-
     await interaction.followUp(`✅ SOTW #${sotwId} (${sotw.skill.toUpperCase()}) has been ended. Results posted in the channel.`);
     await audit(interaction.client, interaction.guildId, `SOTW #${sotwId} (${sotw.skill}) ended by <@${interaction.user.id}>`);
+    return;
+  }
+
+  if (parsed.action === 'sotw_cancel') {
+    const sotwId = parseInt(parsed.targetId, 10);
+    const sotw = await db.prepare('SELECT * FROM sotw WHERE id = ? AND guild_id = ? AND ended = 0').get(sotwId, interaction.guildId);
+    if (!sotw) {
+      await interaction.update({ content: '❌ SOTW not found or already ended.', components: [] });
+      return;
+    }
+    const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+    if (sotw.wom_competition_id && settings?.wom_verif_code) {
+      try {
+        await require('../services/wom').deleteCompetition(sotw.wom_competition_id, settings.wom_verif_code);
+      } catch (err) {
+        console.error('WOM delete on cancel:', err.message);
+      }
+    }
+    await db.prepare('UPDATE sotw SET ended = 1, winner_rsn = ? WHERE id = ?').run('Cancelled', sotw.id);
+    await db.prepare("UPDATE events SET reminder_sent = 1 WHERE guild_id = ? AND category = 'sotw' AND title LIKE ?")
+      .run(interaction.guildId, `%${sotw.skill}%`);
+    await interaction.update({ content: `SOTW **${sotw.skill}** is off. No winner.`, components: [] });
+    await audit(interaction.client, interaction.guildId, `SOTW #${sotwId} (${sotw.skill}) cancelled by <@${interaction.user.id}>`);
+    return;
+  }
+
+  if (parsed.action === 'sotw_queue_clear') {
+    const count = await require('../services/sotwQueue').clearQueue(interaction.guildId);
+    await interaction.update({
+      content: `Cleared ${count} item${count === 1 ? '' : 's'} from the SOTW queue.`,
+      components: [],
+    });
+    await audit(interaction.client, interaction.guildId, `SOTW queue cleared by <@${interaction.user.id}>`);
+    return;
+  }
+
+  if (parsed.action === 'bingo_end') {
+    const bingoId = parseInt(parsed.targetId, 10);
+    const bingo = require('../services/bingo');
+    const card = await bingo.getBingo(interaction.guildId, bingoId);
+    if (!card || card.status === 'ended') {
+      await interaction.update({ content: 'Board already closed or gone.', components: [] });
+      return;
+    }
+    await db.prepare("UPDATE bingo_events SET status = 'ended', ended_at = datetime('now') WHERE id = ? AND guild_id = ?")
+      .run(bingoId, interaction.guildId);
+    await interaction.update({
+      content: `Bingo #${bingoId} ended.`,
+      embeds: [await bingo.boardEmbed(await bingo.getBingo(interaction.guildId, bingoId))],
+      components: [],
+    });
+    await audit(interaction.client, interaction.guildId, `Bingo #${bingoId} ended by <@${interaction.user.id}>`);
+    return;
+  }
+
+  if (parsed.action === 'raffle_draw' || parsed.action === 'raffle_end') {
+    const id = parseInt(parsed.targetId, 10);
+    const raffle = await db.prepare('SELECT * FROM raffles WHERE id = ? AND guild_id = ?').get(id, interaction.guildId);
+    if (!raffle) {
+      await interaction.update({ content: `Raffle #${id} not found.`, components: [] });
+      return;
+    }
+    if (raffle.drawn) {
+      await interaction.update({ content: `Raffle #${id} already closed.`, components: [] });
+      return;
+    }
+    const mode = parsed.action === 'raffle_end' ? 'close' : 'draw';
+    await interaction.update({ content: mode === 'close' ? `Closing raffle #${id}…` : `Drawing raffle #${id}…`, components: [] });
+    const settled = await require('../services/raffleRun').settle(interaction.client, raffle, { mode });
+    if (settled.skipped) {
+      await interaction.followUp({ content: `Raffle #${id} was already closed.`, flags: 64 });
+      return;
+    }
+    if (mode === 'close') {
+      await interaction.followUp({ content: `Raffle #${id} **${raffle.title}** closed with no winner.`, flags: 64 });
+      await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** ended by <@${interaction.user.id}> (no winner)`);
+      return;
+    }
+    if (settled.empty) {
+      await interaction.followUp({ content: `Raffle #${id} had no entries. Closed with no winner.`, flags: 64 });
+      return;
+    }
+    await interaction.followUp({ content: `Drawn. Winner is <@${settled.winner.user_id}>.`, flags: 64 });
+    await audit(interaction.client, interaction.guildId, `Raffle #${id} **${raffle.title}** drawn by <@${interaction.user.id}> — winner <@${settled.winner.user_id}>`);
   }
 }
 

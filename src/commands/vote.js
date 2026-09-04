@@ -2,13 +2,12 @@ const { SlashCommandBuilder, PollLayoutType } = require('discord.js');
 const { getDb } = require('../db/database');
 const wom = require('../services/wom');
 const { SKILL_CHOICES } = wom;
-const { isAdmin, ADMIN_PERMISSION } = require('../services/permissions');
+const { isAdmin } = require('../services/permissions');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vote')
     .setDescription('Create a native Discord poll for clan voting')
-    .setDefaultMemberPermissions(ADMIN_PERMISSION)
     .addSubcommand(sub =>
       sub.setName('sotw')
         .setDescription('Poll for the next Skill of the Week')

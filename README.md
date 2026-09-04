@@ -94,71 +94,55 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=27
 
 ## Commands
 
-### Member
-| Command | Description |
-|---|---|
-| `/member link rsn:<name>` | Link your Discord to your OSRS RSN |
-| `/member unlink` | Remove your RSN link |
-| `/member whois user:@user` | Look up someone's RSN |
-| `/member list` | List all linked members |
+Lookups live under `/me` and `/clan`. Staff tools stay off the member slash list.
 
-### Events
+### You
 | Command | Description |
 |---|---|
-| `/event create title:<t> datetime:<dt> recurring:<weekly/monthly>` | Create an event (auto-reminds 15 min before) |
-| `/event list` | Show upcoming events |
-| `/event cancel id:#` | Cancel an event |
-| `/event remind id:#` | Send a manual reminder |
-
-### Raffles
-| Command | Description |
-|---|---|
-| `/raffle create title:<t>` | Create a raffle with button entry (RSN-linked only) |
-| `/raffle entries id:#` | Check entry count |
-| `/raffle draw id:#` | Draw a random winner |
-| `/raffle list` | List all raffles |
-| `/raffle history [user:@user]` | Show raffle win stats or server leaderboard |
-
-### SOTW (Skill of the Week)
-| Command | Description |
-|---|---|
-| `/sotw start skill:<skill>` | Start a SOTW (auto-creates WOM competition) |
-| `/sotw standings` | Show live standings from WOM |
-| `/sotw current` | Show the active SOTW |
-| `/sotw me` | Show your personal progress in the current SOTW |
-| `/sotw champions` | Show cumulative SOTW win leaderboard |
-| `/sotw end` | End SOTW and post results |
-| `/sotw history` | Show past SOTW winners |
-| `/sotw update` | Force update WOM participant data |
-
-### Leaderboard
-| Command | Description |
-|---|---|
-| `/leaderboard hiscores skill:<skill>` | Top clan members by current XP |
-| `/leaderboard gained skill:<skill> period:<p>` | Top XP gained (day/week/month/year) |
-| `/leaderboard player rsn:<name>` | Look up a player's stats (rich embed) |
-
-### Config (Admin only)
-| Command | Description |
-|---|---|
-| `/config wom-group group_id:<id>` | Set WOM group ID |
-| `/config wom-verification code:<code>` | Set WOM verification code |
-| `/config reminder-channel channel:#ch` | Set default reminder channel |
-| `/config view` | View current settings |
+| `/me link rsn:` | Link Discord to an OSRS RSN |
+| `/me unlink` | Drop the link |
+| `/me profile` · `/me balance` · `/me goals` | Stats, credits, personal goals |
 
 ### Clan
 | Command | Description |
 |---|---|
-| `/clan info` | Dashboard: active SOTW, upcoming events, raffles, polls, member count |
+| `/clan info` | What’s live |
+| `/clan hiscores` · `/clan gained` | WOM boards |
+| `/clan members` · `/clan achievements` | Roster and 99s/KC flags |
+| `/clan credits` · `/clan sync` | Guild-credit board / WOM roster sync |
 
-### Polls
+### Skill / Boss of the Week
 | Command | Description |
 |---|---|
-| `/vote sotw skill_1:<s> skill_2:<s> ...` | Poll for next SOTW (auto-starts winner!) |
-| `/vote botw boss_1:<b> boss_2:<b> ...` | Poll for next Boss of the Week |
-| `/vote generic question:<q> option_1:<o> ...` | Create a generic poll |
-| `/vote results id:#` | Show poll results |
-| `/vote list` | List recent polls |
+| `/sotw current` · `/standings` · `/me` | Live week |
+| `/sotw start` optional **prize** | Staff. WOM week, not a calendar mass |
+| `/sotw prize` | Stamp loot on a week already running |
+| `/sotw end` · `/cancel` · `/queue` | Confirm before end/cancel/queue clear |
+| `/boss week` optional **prize** | BOTW hunt |
+| `/boss kc` · `/boss end` | Board / close |
+
+### Masses
+| Command | Description |
+|---|---|
+| `/event create` | **about** is required (world, boss, gear) |
+| `/event list` · `/event cancel` | Calendar |
+| `/subscribe add` | Includes masses plus SOTW and BOTW |
+
+### Raffle / bingo / ranks
+| Command | Description |
+|---|---|
+| `/raffle create` | **hours** or **until** required |
+| `/raffle draw` · `/raffle end` | Confirm, then close |
+| `/bingo create` · `/start` · `/submit` | One live board at a time |
+| `/rank set` · `clear` · `who` | Woodling → Ascendant (Manage Roles) |
+| `/config ranks` | Create/paint the ten Discord roles |
+
+### Votes / mod
+| Command | Description |
+|---|---|
+| `/vote results` · `/vote list` | Members can look |
+| `/vote sotw` · `/botw` · `/generic` · `/cancel` | Admins |
+| `/mod timeout` · `kick` · `ban` · `purge` | Per-action Discord permission |
 
 ## How SOTW Voting Works
 
@@ -197,20 +181,12 @@ osrs-clan-bot/
 ├── src/
 │   ├── index.js              # Bot entry point
 │   ├── deploy-commands.js    # Slash command registration
-│   ├── commands/
-│   │   ├── member.js         # RSN linking
-│   │   ├── event.js          # Events & reminders
-│   │   ├── raffle.js         # Raffles
-│   │   ├── sotw.js           # Skill of the Week
-│   │   ├── leaderboard.js    # Clan leaderboards
-│   │   ├── config.js         # Admin settings
-│   │   └── help.js           # Help command
-│   ├── services/
-│   │   ├── wom.js            # Wise Old Man API client
-│   │   └── reminders.js      # Reminder poller & SOTW auto-finalize
+│   ├── commands/             # Slash commands (`/me`, `/clan`, sotw, raffle, bingo, rank, mod, …)
+│   ├── services/             # WOM, ranks, cards, reminders, hub ingest, economy
 │   └── db/
-│       ├── database.js       # SQLite setup & schema
-│       └── init.js           # DB initialization script
+│       ├── database.js       # SQLite
+│       └── postgres.js       # Render Postgres
+├── scripts/smoke.js
 ├── package.json
 ├── .env.example
 ├── .gitignore
