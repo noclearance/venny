@@ -26,10 +26,10 @@ function validateEnv() {
     console.warn('⚠️  CLIENT_ID is missing. Slash command registration will fail until you set it in .env.');
   }
 
-  if ((process.env.OPENAI_API_KEY || '').trim()) {
-    console.log('OpenAI: card copy on');
+  if ((process.env.XAI_API_KEY || '').trim()) {
+    console.log('SpaceXAI: card copy on (grok-4.5)');
   } else {
-    console.log('OpenAI: no key — using canned Venny lines');
+    console.log('SpaceXAI: no XAI_API_KEY — using canned Venny lines');
   }
 }
 

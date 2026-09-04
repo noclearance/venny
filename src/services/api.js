@@ -200,7 +200,8 @@ async function status(client) {
   return {
     ok: Boolean(client?.isReady?.()),
     discord: Boolean(client?.isReady?.()),
-    openai: Boolean((process.env.OPENAI_API_KEY || '').trim()),
+    xai: Boolean((process.env.XAI_API_KEY || '').trim()),
+    openai: false,
     postgres: Boolean((process.env.DATABASE_URL || '').trim()),
     uptime_s: Math.round(process.uptime()),
   };

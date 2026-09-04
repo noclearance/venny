@@ -4,7 +4,12 @@
 // are fields added in code — same as Grazy's from_dict + extra field.
 
 const TIMEOUT_MS = 30000;
-const MODEL = 'gpt-4o-mini';
+const MODEL = 'grok-4.5';
+const API_URL = 'https://api.x.ai/v1/chat/completions';
+
+function apiKey() {
+  return (process.env.XAI_API_KEY || '').trim();
+}
 
 const PERSONA = `You are Venny, grandmaster of clan events for Misclickers, an Old School RuneScape Discord clan.
 Your tone is epic, engaging, slightly cheeky, and highly detailed. You are here to build excitement and rally the members.
@@ -109,20 +114,20 @@ function venny(job, details = {}, extra = {}) {
   return { ...fallbackOf(job, details, extra), source: 'venny' };
 }
 
-let openaiChain = Promise.resolve();
+let flavorChain = Promise.resolve();
 
 async function announce(job, details = {}, extra = {}) {
   const run = () => announceNow(job, details, extra);
-  const next = openaiChain.then(run, run);
-  openaiChain = next.catch(() => {});
+  const next = flavorChain.then(run, run);
+  flavorChain = next.catch(() => {});
   return next;
 }
 
 async function announceNow(job, details = {}, extra = {}) {
   const fallback = fallbackOf(job, details, extra);
-  const key = (process.env.OPENAI_API_KEY || '').trim();
+  const key = apiKey();
   if (!key) {
-    console.warn(`OpenAI ${job}: no key — Venny copy, no OpenAI`);
+    console.warn(`SpaceXAI ${job}: no XAI_API_KEY — Venny copy`);
     return fallback;
   }
 
@@ -132,7 +137,7 @@ async function announceNow(job, details = {}, extra = {}) {
   const started = Date.now();
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch(API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -141,6 +146,7 @@ async function announceNow(job, details = {}, extra = {}) {
       signal: controller.signal,
       body: JSON.stringify({
         model: MODEL,
+        reasoning_effort: 'low',
         temperature: 0.9,
         max_tokens: 280,
         response_format: { type: 'json_object' },
@@ -154,9 +160,9 @@ async function announceNow(job, details = {}, extra = {}) {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       if (res.status === 429) {
-        console.warn('OpenAI quota empty. Add billing at https://platform.openai.com/settings/organization/billing — keeping Venny copy.');
+        console.warn('SpaceXAI rate limited. Add credits at https://console.x.ai — keeping Venny copy.');
       } else {
-        console.warn(`OpenAI ${job}: HTTP ${res.status} ${body.slice(0, 180)}`);
+        console.warn(`SpaceXAI ${job}: HTTP ${res.status} ${body.slice(0, 180)}`);
       }
       return fallback;
     }
@@ -164,7 +170,7 @@ async function announceNow(job, details = {}, extra = {}) {
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content;
     if (!raw) {
-      console.warn(`OpenAI ${job}: empty response`);
+      console.warn(`SpaceXAI ${job}: empty response`);
       return fallback;
     }
 
@@ -172,20 +178,20 @@ async function announceNow(job, details = {}, extra = {}) {
     const title = clip(parsed.title, 256);
     const description = clip(parsed.description, 1800);
     if (!title && !description) {
-      console.warn(`OpenAI ${job}: JSON missing title/description`);
+      console.warn(`SpaceXAI ${job}: JSON missing title/description`);
       return fallback;
     }
 
-    console.log(`OpenAI ${job}: json ${Date.now() - started}ms`);
+    console.log(`SpaceXAI ${job}: json ${Date.now() - started}ms`);
     return {
       title: title || fallback.title,
       description: description || fallback.description,
       color: parseColor(parsed.color, fallback.color),
-      source: 'openai',
+      source: 'xai',
     };
   } catch (err) {
     const why = err.name === 'AbortError' ? `timeout ${TIMEOUT_MS}ms` : err.message;
-    console.warn(`OpenAI ${job}: fallback (${why})`);
+    console.warn(`SpaceXAI ${job}: fallback (${why})`);
     return fallback;
   } finally {
     clearTimeout(timer);

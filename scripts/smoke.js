@@ -1,5 +1,6 @@
-// Load every slash command and exercise card copy without hitting Discord or OpenAI.
+// Load every slash command and exercise card copy without hitting Discord or SpaceXAI.
 process.env.OPENAI_API_KEY = '';
+process.env.XAI_API_KEY = '';
 process.env.BOT_SECRET = '';
 process.env.DISCORD_TOKEN = process.env.DISCORD_TOKEN || 'x'.repeat(60);
 process.env.CLIENT_ID = process.env.CLIENT_ID || '1';
@@ -565,6 +566,15 @@ check('joinDescription skips duplicate notes', () => {
     const card = flavor.venny('event_start', { title: 'ToB' });
     assert.strictEqual(card.source, 'venny');
     assert(card.title);
+  });
+
+  check('flavor uses SpaceXAI grok-4.5', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/flavor.js'), 'utf8');
+    assert(src.includes('https://api.x.ai/v1/chat/completions'));
+    assert(src.includes('grok-4.5'));
+    assert(src.includes('XAI_API_KEY'));
+    assert(!src.includes('api.openai.com'));
+    assert(!src.includes('gpt-4o-mini'));
   });
 
   check('EST is fixed UTC-5 not New York DST', () => {

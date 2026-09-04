@@ -93,7 +93,7 @@ function warnIfOff() {
   console.warn('Hub ingest off — set BOT_SECRET on Render');
 }
 
-const SECRET_KEY = /discord_token|bot_token|wom_verif|verification_code|openai|gemini|api_token|bot_secret|api_key/i;
+const SECRET_KEY = /discord_token|bot_token|wom_verif|verification_code|openai|gemini|xai_api|api_token|bot_secret|api_key/i;
 
 function stripSecrets(value) {
   if (!value || typeof value !== 'object') return value;

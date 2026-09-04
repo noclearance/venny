@@ -84,7 +84,7 @@ async function flavorLater(message, spec, extras) {
       fallbackTitle: spec.fallbackTitle,
       fallbackDescription: spec.fallbackDescription,
     });
-    if (json.source !== 'openai') return;
+    if (json.source !== 'xai') return;
     const embeds = [theme.fromJson(spec.kind, {
       ...json,
       description: joinDescription(json, spec.extraLines || []),
