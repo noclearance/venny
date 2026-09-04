@@ -229,11 +229,12 @@ module.exports = {
         require('../services/aisBot').emit('sync', {
           guild_id: interaction.guildId,
           source: 'clan_sync',
-          wom_group_id: settings.wom_group_id,
-          synced,
-          linked,
-          unlinked: unlinked.length,
-          unlinked_sample: unlinked.slice(0, 25),
+          facts: {
+            wom_group_id: settings.wom_group_id,
+            synced,
+            linked,
+            unlinked: unlinked.length,
+          },
           ts: now,
         });
       } catch (err) {

@@ -122,6 +122,80 @@ function guildIdFrom(body) {
   return String(body?.guild_id || process.env.GUILD_ID || process.env.CLAN_GUILD_ID || '').trim();
 }
 
+function guildIdFromReq(req, body = {}) {
+  let q = '';
+  try {
+    q = new URL(req.url || '/', 'http://venny.local').searchParams.get('guild_id') || '';
+  } catch { /* ignore */ }
+  return String(q || guildIdFrom(body)).trim();
+}
+
+function clipRow(row, keys) {
+  if (!row) return null;
+  const out = {};
+  for (const k of keys) out[k] = row[k] ?? null;
+  return out;
+}
+
+async function clanNow(guildId) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const { MASS } = require('./calendar');
+  const sotw = await db.prepare(
+    'SELECT id, skill, starts_at, ends_at, prize, wom_competition_id FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC',
+  ).get(guildId);
+  const botw = await db.prepare(
+    'SELECT id, boss, starts_at, ends_at, prize FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC',
+  ).get(guildId);
+  const nextMass = await db.prepare(
+    `SELECT id, title, description, event_time, category, channel_id FROM events WHERE guild_id = ? AND event_time >= ? AND ${MASS} ORDER BY event_time ASC`,
+  ).get(guildId, now);
+  const raffles = await db.prepare(
+    'SELECT id, title, description, ends_at, drawn FROM raffles WHERE guild_id = ? AND drawn = 0 ORDER BY id DESC',
+  ).all(guildId);
+  const { stillOpen } = require('./raffleRun');
+  const raffle = (raffles || []).find(r => stillOpen(r)) || null;
+  const bingo = await db.prepare(
+    "SELECT id, title, status, size, layout FROM bingo_events WHERE guild_id = ? AND status = 'active' ORDER BY id DESC",
+  ).get(guildId);
+  return {
+    guild_id: guildId,
+    sotw: clipRow(sotw, ['id', 'skill', 'starts_at', 'ends_at', 'prize', 'wom_competition_id']),
+    botw: clipRow(botw, ['id', 'boss', 'starts_at', 'ends_at', 'prize']),
+    next_mass: clipRow(nextMass, ['id', 'title', 'description', 'event_time', 'category', 'channel_id']),
+    raffle: raffle ? clipRow(raffle, ['id', 'title', 'description', 'ends_at']) : null,
+    bingo: clipRow(bingo, ['id', 'title', 'status', 'size', 'layout']),
+    ts: now,
+  };
+}
+
+async function clanMembers(client, guildId) {
+  const db = getDb();
+  const rows = await db.prepare('SELECT user_id, rsn FROM members WHERE guild_id = ? ORDER BY rsn').all(guildId);
+  const list = (rows || []).map(r => ({ discord_id: r.user_id, rsn: r.rsn, rank: null }));
+  if (!client?.isReady?.() || !list.length) return { guild_id: guildId, members: list };
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    await guild.roles.fetch();
+    await guild.members.fetch().catch(() => {});
+    for (const row of list) {
+      const member = guild.members.cache.get(row.discord_id);
+      if (member) row.rank = ranks.currentKey(member) || null;
+    }
+  } catch (err) {
+    console.warn(`clan members ranks: ${err.message}`);
+  }
+  return { guild_id: guildId, members: list };
+}
+
+function clanRanks() {
+  return {
+    order: ranks.ORDER,
+    names: ranks.clanRankNames(),
+    aliases: ranks.HUB_ALIAS,
+  };
+}
+
 async function status(client) {
   return {
     ok: Boolean(client?.isReady?.()),
@@ -239,7 +313,43 @@ async function handleApi(req, res, client) {
   }
 
   if (method === 'GET' && url === '/api/status') {
-    json(req, res, 200, { ...(await status(client)), sync_rank: true });
+    json(req, res, 200, { ...(await status(client)), sync_rank: true, clan_now: true });
+    return true;
+  }
+
+  if (method === 'GET' && url === '/api/clan/now') {
+    if (!requireToken(req, res)) return true;
+    const guildId = guildIdFromReq(req);
+    if (!guildId) {
+      json(req, res, 400, { error: 'guild_id missing (set GUILD_ID or pass ?guild_id=)' });
+      return true;
+    }
+    try {
+      json(req, res, 200, await clanNow(guildId));
+    } catch (err) {
+      json(req, res, 400, { error: err.message });
+    }
+    return true;
+  }
+
+  if (method === 'GET' && url === '/api/clan/members') {
+    if (!requireToken(req, res)) return true;
+    const guildId = guildIdFromReq(req);
+    if (!guildId) {
+      json(req, res, 400, { error: 'guild_id missing (set GUILD_ID or pass ?guild_id=)' });
+      return true;
+    }
+    try {
+      json(req, res, 200, await clanMembers(client, guildId));
+    } catch (err) {
+      json(req, res, 400, { error: err.message });
+    }
+    return true;
+  }
+
+  if (method === 'GET' && url === '/api/clan/ranks') {
+    if (!requireToken(req, res)) return true;
+    json(req, res, 200, clanRanks());
     return true;
   }
 
@@ -291,4 +401,14 @@ async function handleApi(req, res, client) {
   return false;
 }
 
-module.exports = { handleApi, preflight, syncRank, readBearer, looksLikeDiscordBotToken, apiToken, corsOrigins };
+module.exports = {
+  handleApi,
+  preflight,
+  syncRank,
+  readBearer,
+  looksLikeDiscordBotToken,
+  apiToken,
+  corsOrigins,
+  clanNow,
+  clanRanks,
+};

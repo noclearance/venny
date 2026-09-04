@@ -96,7 +96,7 @@ function startServer(client) {
   });
 
   server.listen(port, () => {
-    console.log(`HTTP :${port}  GET /health  POST /api/announce  POST /api/sync-rank  POST /hook/<token>`);
+    console.log(`HTTP :${port}  GET /health  GET /api/clan/now  POST /api/announce  POST /api/sync-rank  POST /hook/<token>`);
   });
   return server;
 }

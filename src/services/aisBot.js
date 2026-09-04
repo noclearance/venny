@@ -4,13 +4,76 @@ const DEFAULT_BASE = 'https://misclickerz.ai.studio/api/bot';
 const TIMEOUT_MS = 8000;
 const MAX_BODY = 80_000;
 
-// Hub docs: POST /api/bot/webhook (universal) and POST /api/bot/misclick.
+// Hub docs: POST /api/bot/webhook (universal). Typed `type` is the discriminator.
 const ROUTES = {
   webhook: '/webhook',
-  misclick: '/misclick',
+  misclick: '/webhook',
   drop: '/webhook',
   sync: '/webhook',
 };
+
+const TYPES = new Set([
+  'sotw_start', 'sotw_end', 'event_start', 'event_remind',
+  'raffle_open', 'raffle_win', 'bingo_start', 'botw_start', 'botw_end',
+  'rank', 'sync', 'misclick', 'webhook',
+]);
+
+function ascii(value) {
+  return String(value ?? '')
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u2033]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ');
+}
+
+function factsOf(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (v == null) {
+      out[k] = null;
+      continue;
+    }
+    if (typeof v === 'string') out[k] = ascii(v).slice(0, 400);
+    else if (typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  }
+  return out;
+}
+
+function typeOf(raw) {
+  const t = String(raw || '').trim();
+  return TYPES.has(t) ? t : 'webhook';
+}
+
+function pack(payload = {}) {
+  const type = typeOf(payload.type);
+  return {
+    type,
+    kind: payload.kind || type,
+    guild_id: payload.guild_id || null,
+    title: ascii(payload.title || '').slice(0, 200) || null,
+    description: ascii(payload.description || payload.content || '').slice(0, 1800) || null,
+    jump: payload.jump || null,
+    ts: payload.ts || new Date().toISOString(),
+    source: payload.source || null,
+    facts: factsOf(payload.facts),
+  };
+}
+
+function typeFromJob(kind, job) {
+  if (TYPES.has(job)) return job;
+  if (job === 'raffle_start') return 'raffle_open';
+  if (job === 'event_soon' || job === 'event_now' || job === 'event_remind') return 'event_remind';
+  if (kind === 'sotw' && job === 'sotw_end') return 'sotw_end';
+  if (kind === 'sotw') return 'sotw_start';
+  if (kind === 'event') return 'event_start';
+  if (kind === 'raffle') return job === 'raffle_win' || job === 'raffle_end' ? 'raffle_win' : 'raffle_open';
+  if (kind === 'danger' && job === 'botw_end') return 'botw_end';
+  if (kind === 'danger') return 'botw_start';
+  if (job === 'bingo_start') return 'bingo_start';
+  return 'webhook';
+}
 
 function baseUrl() {
   let url = (process.env.AIS_BOT_URL || DEFAULT_BASE).replace(/\/+$/, '');
@@ -99,9 +162,10 @@ async function post(path, payload) {
 }
 
 function emit(event, payload) {
-  const path = ROUTES[event] || ROUTES.webhook;
-  return post(path, { type: event, ...payload }).catch(err => {
-    console.warn(`AIS ${event}: ${err.message}`);
+  const type = typeOf(event);
+  const packed = pack({ type, ...payload });
+  return post(ROUTES.webhook, packed).catch(err => {
+    console.warn(`AIS ${type}: ${err.message}`);
     return { ok: false, error: err.message };
   });
 }
@@ -116,13 +180,14 @@ function classifyHook(hook = {}, body = {}) {
 
 function ingestIncoming(hook, body) {
   const kind = classifyHook(hook, body);
-  return emit(kind, {
+  return emit(kind === 'misclick' ? 'misclick' : 'webhook', {
     guild_id: hook.guild_id || null,
     source: body.source || hook.name || 'hook',
     title: body.title || hook.name || null,
-    content: body.content || body.message || null,
-    image_url: body.image_url || body.image || null,
-    data: body,
+    description: body.content || body.message || null,
+    facts: {
+      image_url: body.image_url || body.image || null,
+    },
     ts: new Date().toISOString(),
   });
 }
@@ -134,5 +199,9 @@ module.exports = {
   classifyHook,
   baseUrl,
   warnIfOff,
+  ascii,
+  pack,
+  typeFromJob,
+  TYPES,
   ROUTES,
 };

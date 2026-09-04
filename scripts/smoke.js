@@ -300,9 +300,35 @@ check('hub ingest uses X-Venny-Secret and /api/bot/webhook', () => {
   const hub = require('../src/services/aisBot');
   assert.strictEqual(hub.baseUrl(), 'https://misclickerz.ai.studio/api/bot');
   assert.strictEqual(hub.ROUTES.drop, '/webhook');
-  assert.strictEqual(hub.ROUTES.misclick, '/misclick');
+  assert.strictEqual(hub.ROUTES.misclick, '/webhook');
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/aisBot.js'), 'utf8');
   assert(src.includes("'X-Venny-Secret'"));
+  assert.strictEqual(hub.ascii("we\u2019re live"), "we're live");
+  const packed = hub.pack({
+    type: 'event_start',
+    title: "We\u2019re live",
+    description: 'vampyre snail w532',
+    guild_id: '1',
+    facts: { world: 532, extra: { nope: true } },
+  });
+  assert.strictEqual(packed.type, 'event_start');
+  assert.strictEqual(packed.title, "We're live");
+  assert.strictEqual(packed.facts.world, 532);
+  assert.strictEqual(packed.facts.extra, undefined);
+  assert.strictEqual(hub.typeFromJob('sotw', 'sotw_end'), 'sotw_end');
+  assert.strictEqual(hub.typeFromJob('raffle', 'raffle_start'), 'raffle_open');
+});
+
+check('clan now and ranks payloads', () => {
+  const api = require('../src/services/api');
+  const ranks = api.clanRanks();
+  assert.strictEqual(ranks.order.length, 10);
+  assert.strictEqual(ranks.names.woodling, 'Woodling');
+  assert.strictEqual(ranks.aliases.trial, 'woodling');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/api.js'), 'utf8');
+  assert(src.includes("/api/clan/now"));
+  assert(src.includes("/api/clan/members"));
+  assert(src.includes("/api/clan/ranks"));
 });
 
 check('sync-rank Bearer is not the Discord token', () => {

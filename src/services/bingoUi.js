@@ -83,12 +83,15 @@ async function handlePlayerClaim(interaction, card, tile, proof) {
     proof: proof || null,
     status: 'pending',
   });
-  require('./aisBot').emit('drop', {
+  require('./aisBot').emit('webhook', {
     guild_id: interaction.guildId,
-    user_id: interaction.user.id,
-    bingo_id: card.id,
-    tile: tile.label,
-    proof: proof || null,
+    source: 'bingo_claim',
+    title: tile.label,
+    facts: {
+      bingo_id: card.id,
+      tile: tile.label,
+      user_id: interaction.user.id,
+    },
     ts: new Date().toISOString(),
   });
   await replyFlags(interaction, {

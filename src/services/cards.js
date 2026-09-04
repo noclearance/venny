@@ -22,7 +22,7 @@ function pack(kind, json, {
   fallbackDescription,
 } = {}) {
   return {
-    json,
+    json: { ...json, job: job || json.job || null, facts: facts || json.facts || {} },
     embed: theme.fromJson(kind, { ...json, description: joinDescription(json, extraLines) }, {
       fields,
       thumbnail,
@@ -125,14 +125,16 @@ async function publish(client, guildId, {
     mention,
   });
   if (event && posted && json) {
-    hub.emit(event, {
-      type: event,
+    const type = hub.typeFromJob(kind, json.job || event);
+    hub.emit(type, {
+      type,
       guild_id: guildId,
       kind,
       title: json.title || null,
-      description: json.description || null,
+      description: face.description || json.description || null,
       source: json.source || null,
       jump: announce.jumpUrl(guildId, posted.channelId, posted.id),
+      facts: json.facts || {},
       ts: new Date().toISOString(),
     });
   }
