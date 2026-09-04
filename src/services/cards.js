@@ -74,26 +74,30 @@ async function make(kind, opts = {}) {
   return pack(kind, json, opts);
 }
 
-async function flavorLater(message, spec) {
-  if (!message || typeof message.edit !== 'function' || !spec?.kind || !spec?.job) return;
+async function flavorLater(message, spec, extras) {
+  if (!spec?.kind || !spec?.job) return;
+  const targets = [message, ...(Array.isArray(extras) ? extras : extras ? [extras] : [])]
+    .filter(m => m && typeof m.edit === 'function');
+  if (!targets.length) return;
   try {
     const json = await flavor.announce(spec.job, spec.facts || {}, {
       fallbackTitle: spec.fallbackTitle,
       fallbackDescription: spec.fallbackDescription,
     });
     if (json.source !== 'openai') return;
-    await message.edit({
-      embeds: [theme.fromJson(spec.kind, {
-        ...json,
-        description: joinDescription(json, spec.extraLines || []),
-      }, {
-        fields: spec.fields,
-        thumbnail: spec.thumbnail,
-        url: spec.url,
-        footer: spec.footer,
-        timestamp: spec.timestamp,
-      })],
-    });
+    const embeds = [theme.fromJson(spec.kind, {
+      ...json,
+      description: joinDescription(json, spec.extraLines || []),
+    }, {
+      fields: spec.fields,
+      thumbnail: spec.thumbnail,
+      url: spec.url,
+      footer: spec.footer,
+      timestamp: spec.timestamp,
+    })];
+    for (const m of targets) {
+      await m.edit({ embeds }).catch(err => console.warn(`flavor edit: ${err.message}`));
+    }
   } catch (err) {
     console.warn(`flavor edit: ${err.message}`);
   }

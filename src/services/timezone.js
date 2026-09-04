@@ -6,14 +6,14 @@ const EVENT_CATEGORIES = ['general', 'boss', 'pvm', 'skilling', 'social', 'sotw'
 
 const ABBREV_ZONES = {
   utc: 'UTC', gmt: 'UTC', z: 'UTC',
-  est: 'America/New_York', edt: 'America/New_York',
-  cst: 'America/Chicago', cdt: 'America/Chicago',
-  mst: 'America/Denver', mdt: 'America/Denver',
-  pst: 'America/Los_Angeles', pdt: 'America/Los_Angeles',
-  akst: 'America/Anchorage', akdt: 'America/Anchorage',
-  hst: 'Pacific/Honolulu',
-  bst: 'Europe/London',
-  aest: 'Australia/Sydney', aedt: 'Australia/Sydney',
+  est: 'UTC-5', edt: 'UTC-4',
+  cst: 'UTC-6', cdt: 'UTC-5',
+  mst: 'UTC-7', mdt: 'UTC-6',
+  pst: 'UTC-8', pdt: 'UTC-7',
+  akst: 'UTC-9', akdt: 'UTC-8',
+  hst: 'UTC-10',
+  bst: 'UTC+1',
+  aest: 'UTC+10', aedt: 'UTC+11',
 };
 
 const FORMATS = [
@@ -90,7 +90,13 @@ function parseInZone(datetimeStr, tz) {
 
   for (const fmt of FORMATS) {
     const dt = DateTime.fromFormat(s, fmt, { zone });
-    if (dt.isValid) return dt.toJSDate();
+    if (!dt.isValid) continue;
+    let out = dt;
+    if (!/y/.test(fmt)) {
+      const now = DateTime.now().setZone(zone);
+      while (out.toMillis() <= now.toMillis()) out = out.plus({ years: 1 });
+    }
+    return out.toJSDate();
   }
 
   const iso = DateTime.fromISO(s, { zone });

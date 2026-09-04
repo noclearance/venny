@@ -62,12 +62,11 @@ async function startNextQueuedSotw(guildId, client) {
           : { content: `Auto-started from queue:\n\n${result.response}` });
         const theme = require('./theme');
         const cards = require('./cards');
-        if (result.flavor) cards.flavorLater(posted, result.flavor);
         const card = result.card || {
           title: `${next.skill} SOTW`,
           description: theme.line('sotwOpen', next.skill),
         };
-        await cards.publish(client, guildId, {
+        const announced = await cards.publish(client, guildId, {
           kind: 'sotw',
           json: card,
           extraLines: [result.tracking],
@@ -75,6 +74,7 @@ async function startNextQueuedSotw(guildId, client) {
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });
+        if (result.flavor) cards.flavorLater(posted, result.flavor, announced);
       }
     } catch (err) {
       console.error('Failed to post queue auto-start announcement:', err.message);

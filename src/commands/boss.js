@@ -93,8 +93,7 @@ module.exports = {
           fetchReply: true,
         });
         const cards = require('../services/cards');
-        cards.flavorLater(posted, result.flavor);
-        await cards.publish(interaction.client, interaction.guildId, {
+        const announced = await cards.publish(interaction.client, interaction.guildId, {
           kind: 'danger',
           json: result.card,
           fields: result.flavor?.fields,
@@ -102,6 +101,7 @@ module.exports = {
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });
+        cards.flavorLater(posted, result.flavor, announced);
         return;
       }
       const current = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);

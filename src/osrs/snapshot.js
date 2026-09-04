@@ -41,7 +41,9 @@ function parsePlayer(details) {
   const ninetynines = skillList.filter(s => s.level >= 99);
   const virtual120 = skillList.filter(s => s.experience >= XP_FOR_120);
   const combatSkills = ['attack', 'defence', 'strength', 'hitpoints', 'ranged', 'prayer', 'magic'];
-  const all99 = skillList.length >= 23 && skillList.every(s => s.level >= 99);
+  const { SKILLS } = require('../services/wom');
+  const trainable = SKILLS.filter(s => s !== 'overall');
+  const all99 = trainable.length > 0 && trainable.every(s => num(skills[s]?.level) >= 99);
 
   return {
     username: details.username,

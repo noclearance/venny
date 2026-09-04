@@ -4,15 +4,18 @@ const goals = require('./goals');
 const bingo = require('./bingo');
 const live = require('./live');
 
-let cursor = 0;
+let lastId = 0;
 let lastLive = 0;
 
 async function tickTracker(client) {
   const db = getDb();
-  const members = await db.prepare('SELECT * FROM members ORDER BY id ASC').all();
-  if (members.length) {
-    const member = members[cursor % members.length];
-    cursor += 1;
+  let member = await db.prepare('SELECT * FROM members WHERE id > ? ORDER BY id ASC LIMIT 1').get(lastId);
+  if (!member) {
+    lastId = 0;
+    member = await db.prepare('SELECT * FROM members WHERE id > ? ORDER BY id ASC LIMIT 1').get(0);
+  }
+  if (member) {
+    lastId = member.id;
     try {
       const { fresh } = await achievements.scanMember(member.guild_id, member, client);
       await achievements.announce(client, member.guild_id, fresh, member.user_id);

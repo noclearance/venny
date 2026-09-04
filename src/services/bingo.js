@@ -6,11 +6,33 @@ const { award } = require('./economy');
 
 async function activeBingo(guildId) {
   const db = getDb();
-  return await db.prepare(`
+  const live = await db.prepare(`
     SELECT * FROM bingo_events
-    WHERE guild_id = ? AND status IN ('draft','active','paused')
+    WHERE guild_id = ? AND status = 'active'
     ORDER BY id DESC
   `).get(guildId);
+  if (live) return live;
+  return await db.prepare(`
+    SELECT * FROM bingo_events
+    WHERE guild_id = ? AND status IN ('draft','paused')
+    ORDER BY id DESC
+  `).get(guildId);
+}
+
+async function claimStart(guildId, bingoId) {
+  const db = getDb();
+  const other = await db.prepare(
+    "SELECT id FROM bingo_events WHERE guild_id = ? AND status = 'active' AND id != ?",
+  ).get(guildId, bingoId);
+  if (other) return { ok: false, error: `Board #${other.id} is already live.` };
+  const card = await db.prepare('SELECT * FROM bingo_events WHERE id = ? AND guild_id = ?').get(bingoId, guildId);
+  if (!card) return { ok: false, error: 'Board not found.' };
+  if (card.status === 'active') return { ok: false, error: 'Already live.', card };
+  const claimed = await db.prepare(
+    "UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ? AND status IN ('draft','paused')",
+  ).run(bingoId);
+  if (!claimed.changes) return { ok: false, error: 'Could not start that board.', card };
+  return { ok: true, card, restamp: card.status === 'draft' };
 }
 
 async function getBingo(guildId, id) {
@@ -158,11 +180,13 @@ async function listTeams(bingoId) {
   const out = [];
   for (const team of teams) {
     const members = await db.prepare('SELECT user_id FROM bingo_team_members WHERE team_id = ?').all(team.id);
-    const done = (await db.prepare(`
-      SELECT COUNT(DISTINCT tile_id) as count FROM bingo_progress
-      WHERE bingo_id = ? AND team_id = ? AND status = 'complete'
-    `).get(bingoId, team.id)).count;
-    out.push({ ...team, members, completed: done });
+    const score = await db.prepare(`
+      SELECT COUNT(DISTINCT p.tile_id) as tiles, COALESCE(SUM(t.points), 0) as points
+      FROM bingo_progress p
+      JOIN bingo_tiles t ON t.id = p.tile_id
+      WHERE p.bingo_id = ? AND p.team_id = ? AND p.status = 'complete'
+    `).get(bingoId, team.id);
+    out.push({ ...team, members, completed: Number(score?.points || 0), tiles: Number(score?.tiles || 0) });
   }
   return out;
 }
@@ -287,21 +311,29 @@ async function boardEmbed(bingo) {
   });
 }
 
-async function snapshotBaselines(bingo, guildId) {
+async function snapshotBaselines(bingo, guildId, { restamp = false } = {}) {
   const db = getDb();
   const members = await db.prepare('SELECT * FROM members WHERE guild_id = ?').all(guildId);
-  for (const member of members) {
-    try {
-      const parsed = await loadPlayer(member.rsn, { refresh: true });
-      await db.prepare(`
-        INSERT INTO bingo_baselines (bingo_id, user_id, snapshot_json, taken_at)
-        VALUES (?, ?, ?, datetime('now'))
-        ON CONFLICT(bingo_id, user_id) DO UPDATE SET snapshot_json = excluded.snapshot_json, taken_at = excluded.taken_at
-      `).run(bingo.id, member.user_id, JSON.stringify(compactSnapshot(parsed)));
-    } catch (err) {
-      console.error(`Bingo baseline failed for ${member.rsn}:`, err.message);
+  const sql = restamp
+    ? `INSERT INTO bingo_baselines (bingo_id, user_id, snapshot_json, taken_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(bingo_id, user_id) DO UPDATE SET snapshot_json = excluded.snapshot_json, taken_at = excluded.taken_at`
+    : `INSERT INTO bingo_baselines (bingo_id, user_id, snapshot_json, taken_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(bingo_id, user_id) DO NOTHING`;
+  let i = 0;
+  const worker = async () => {
+    while (i < members.length) {
+      const member = members[i++];
+      try {
+        const parsed = await loadPlayer(member.rsn, { refresh: true });
+        await db.prepare(sql).run(bingo.id, member.user_id, JSON.stringify(compactSnapshot(parsed)));
+      } catch (err) {
+        console.error(`Bingo baseline failed for ${member.rsn}:`, err.message);
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, Math.max(1, members.length)) }, worker));
 }
 
 async function markComplete({ bingo, tile, userId, teamId, proof, verifiedBy, status = 'complete', client }) {
@@ -318,7 +350,9 @@ async function markComplete({ bingo, tile, userId, teamId, proof, verifiedBy, st
       completed_at = excluded.completed_at,
       team_id = excluded.team_id
   `).run(bingo.id, tile.id, userId, teamId || null, status, proof || null, verifiedBy || null);
-  if (status === 'complete' && prior?.status !== 'complete') await award(bingo.guild_id, userId, 'bingo_tile', client);
+  if (status === 'complete' && prior?.status !== 'complete') {
+    await award(bingo.guild_id, userId, 'bingo_tile', client, `${bingo.id}:${tile.id}`);
+  }
 }
 
 function metricValue(snap, tile) {
@@ -356,6 +390,7 @@ async function autoCheckMember(bingo, member, client) {
 
 module.exports = {
   activeBingo,
+  claimStart,
   getBingo,
   tilesOf,
   createBingo,

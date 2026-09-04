@@ -17,6 +17,7 @@ module.exports = {
     registerCommands(readyClient).catch(err => {
       console.warn(`Slash command sync on ready: ${err.message}`);
     });
+    require('../services/aisBot').warnIfOff();
     const ranks = require('../services/ranks');
     for (const guild of readyClient.guilds.cache.values()) {
       ranks.paintExisting(guild).catch(err => {

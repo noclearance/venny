@@ -105,8 +105,7 @@ async function postResult(client, raffle, { winner, entries, weightInfo, outcome
   }
 
   const cards = require('./cards');
-  if (posted) cards.flavorLater(posted, made.flavor);
-  await cards.publish(client, raffle.guild_id, {
+  const announced = await cards.publish(client, raffle.guild_id, {
     kind: 'raffle',
     json: made.json,
     fields: winner
@@ -119,6 +118,7 @@ async function postResult(client, raffle, { winner, entries, weightInfo, outcome
     sourceMessageId: posted?.id,
     mention: winner ? `<@${winner.user_id}>` : undefined,
   });
+  if (posted) cards.flavorLater(posted, made.flavor, announced);
   return made;
 }
 

@@ -65,17 +65,28 @@ async function afterPosted(client, guildId, event, message, userId) {
     mode: event.ping_mode,
     roleId: event.ping_role_id,
   });
-  await require('./cards').publish(client, guildId, {
-    kind: 'event',
-    json: { title: event.title, description: event.description, source: 'staff' },
+  const made = require('./cards').venny('event', {
+    job: 'event_start',
+    facts: { title: event.title, category: event.category || 'general' },
+    fallbackTitle: event.title,
+    fallbackDescription: theme.line('eventPosted', event.id),
+    extraLines: [event.description],
     fields: [
       theme.field('When', theme.when(event.event_time), true),
       theme.field('Guild credits', economy.payNote('event_rsvp')),
     ],
+  });
+  const cards = require('./cards');
+  const announced = await cards.publish(client, guildId, {
+    kind: 'event',
+    json: made.json,
+    extraLines: [event.description],
+    fields: made.flavor.fields,
     sourceChannelId: message.channelId,
     sourceMessageId: message.id,
     mention: ping,
   });
+  cards.flavorLater(message, made.flavor, announced);
   const pingNote = event.ping_mode === 'everyone' ? ' ping @everyone' : (event.ping_role_id ? ' ping role' : '');
   await audit(client, guildId, `Event #${event.id} **${event.title}** created by <@${userId}>${pingNote}`);
 }

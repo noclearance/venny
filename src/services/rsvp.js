@@ -102,7 +102,7 @@ async function handleRsvp(interaction) {
 
   await updateEventMessage(interaction.client, event);
   if (status === 'yes' && prior?.status !== 'yes') {
-    await require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client);
+    await require('./economy').award(interaction.guildId, interaction.user.id, 'event_rsvp', interaction.client, event.id);
     require('./ranks').maybePromote(interaction.client, interaction.guildId, interaction.user.id);
   }
 

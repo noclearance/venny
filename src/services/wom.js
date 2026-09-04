@@ -5,6 +5,12 @@
 const BASE_URL = 'https://api.wiseoldman.net/v2';
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
+const GET_CACHE_MS = 45_000;
+const getCache = new Map();
+
+function cacheKey(pathname, options) {
+  return `${(options.method || 'GET').toUpperCase()}:${pathname}`;
+}
 
 function getHeaders() {
   const headers = { 'Content-Type': 'application/json' };
@@ -20,6 +26,10 @@ function sleep(ms) {
 async function womFetch(pathname, options = {}, attempt = 1) {
   const url = `${BASE_URL}${pathname}`;
   const method = (options.method || 'GET').toUpperCase();
+  if (method === 'GET' && attempt === 1) {
+    const hit = getCache.get(cacheKey(pathname, options));
+    if (hit && Date.now() < hit.exp) return hit.val;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -42,6 +52,10 @@ async function womFetch(pathname, options = {}, attempt = 1) {
     }
 
     if (!res.ok) {
+      if (method === 'GET' && res.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(400 * attempt);
+        return womFetch(pathname, options, attempt + 1);
+      }
       let detail = '';
       try {
         const body = await res.json();
@@ -53,17 +67,20 @@ async function womFetch(pathname, options = {}, attempt = 1) {
     }
 
     const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('text/plain')) {
-      return res.text();
+    const payload = contentType.includes('text/plain') ? await res.text() : await res.json();
+    if (method === 'GET') {
+      getCache.set(cacheKey(pathname, options), { val: payload, exp: Date.now() + GET_CACHE_MS });
     }
-    return res.json();
+    return payload;
   } catch (err) {
+    if (method === 'GET' && attempt < MAX_ATTEMPTS && (err.name === 'AbortError' || /timed out/i.test(err.message || ''))) {
+      await sleep(400 * attempt);
+      return womFetch(pathname, options, attempt + 1);
+    }
     if (err.name === 'AbortError') {
       throw new Error('WOM API timed out. Try again in a moment.');
     }
 
-    // Retry GET/429 only — never retry POST/PUT/DELETE after a timeout
-    // (could create a duplicate WOM competition).
     const canRetry = method === 'GET' && attempt < MAX_ATTEMPTS && err.message && !err.message.startsWith('WOM API');
     if (canRetry) {
       await sleep(400 * attempt);

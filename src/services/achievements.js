@@ -1,42 +1,41 @@
 const { getDb } = require('../db/database');
 const theme = require('./theme');
-const { loadPlayer } = require('../osrs/snapshot');
 const { prettyMetric, KC_MILESTONES, CLOG_MILESTONES, XP_FOR_120 } = require('../osrs/catalog');
 const { award } = require('./economy');
 
-async function record(guildId, userId, rsn, key, title, kind, client) {
+async function record(guildId, userId, rsn, key, title, kind, client, { silent = false } = {}) {
   const db = getDb();
   const result = await db.prepare(`
     INSERT OR IGNORE INTO achievements (guild_id, user_id, rsn, key, title, kind, announced)
-    VALUES (?, ?, ?, ?, ?, ?, 0)
-  `).run(guildId, userId, rsn, key, title, kind);
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(guildId, userId, rsn, key, title, kind, silent ? 1 : 0);
   if (result.changes > 0) {
-    await award(guildId, userId, 'achievement', client);
-    return { key, title, kind, fresh: true };
+    if (!silent) await award(guildId, userId, 'achievement', client, key);
+    return { key, title, kind, fresh: !silent };
   }
   return null;
 }
 
-async function detectFromSnapshot(guildId, userId, rsn, parsed, client) {
+async function detectFromSnapshot(guildId, userId, rsn, parsed, client, { silent = false } = {}) {
   const found = [];
   for (const skill of parsed.skillList) {
     if (skill.level >= 99) {
-      const hit = await record(guildId, userId, rsn, `99:${skill.name}`, `99 ${prettyMetric(skill.name)}`, '99', client);
+      const hit = await record(guildId, userId, rsn, `99:${skill.name}`, `99 ${prettyMetric(skill.name)}`, '99', client, { silent });
       if (hit) found.push(hit);
     }
     if (skill.experience >= XP_FOR_120) {
-      const hit = await record(guildId, userId, rsn, `120:${skill.name}`, `Virtual 120 ${prettyMetric(skill.name)}`, '120', client);
+      const hit = await record(guildId, userId, rsn, `120:${skill.name}`, `Virtual 120 ${prettyMetric(skill.name)}`, '120', client, { silent });
       if (hit) found.push(hit);
     }
   }
   if (parsed.maxed) {
-    const hit = await record(guildId, userId, rsn, 'max', 'Max cape (all 99s)', 'cape', client);
+    const hit = await record(guildId, userId, rsn, 'max', 'Max cape (all 99s)', 'cape', client, { silent });
     if (hit) found.push(hit);
   }
   if (parsed.collectionLog) {
     for (const mark of CLOG_MILESTONES) {
       if (parsed.collectionLog >= mark) {
-        const hit = await record(guildId, userId, rsn, `clog:${mark}`, `${mark} collection log slots`, 'clog', client);
+        const hit = await record(guildId, userId, rsn, `clog:${mark}`, `${mark} collection log slots`, 'clog', client, { silent });
         if (hit) found.push(hit);
       }
     }
@@ -44,7 +43,7 @@ async function detectFromSnapshot(guildId, userId, rsn, parsed, client) {
   for (const boss of parsed.bossList) {
     for (const mark of KC_MILESTONES) {
       if (boss.kills >= mark) {
-        const hit = await record(guildId, userId, rsn, `kc:${boss.name}:${mark}`, `${mark} ${prettyMetric(boss.name)} KC`, 'kc', client);
+        const hit = await record(guildId, userId, rsn, `kc:${boss.name}:${mark}`, `${mark} ${prettyMetric(boss.name)} KC`, 'kc', client, { silent });
         if (hit) found.push(hit);
       }
     }
@@ -53,8 +52,13 @@ async function detectFromSnapshot(guildId, userId, rsn, parsed, client) {
 }
 
 async function scanMember(guildId, member, client) {
+  const { loadPlayer, readCache, cacheProfile } = require('../osrs/snapshot');
+  const prev = await readCache(guildId, member.user_id);
   const parsed = await loadPlayer(member.rsn, { refresh: true });
-  return { parsed, fresh: await detectFromSnapshot(guildId, member.user_id, member.rsn, parsed, client) };
+  const silent = !prev;
+  const fresh = await detectFromSnapshot(guildId, member.user_id, member.rsn, parsed, client, { silent });
+  await cacheProfile(guildId, member.user_id, member.rsn, parsed);
+  return { parsed, fresh: silent ? [] : fresh };
 }
 
 async function recent(guildId, userId = null, limit = 15) {

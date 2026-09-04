@@ -203,10 +203,15 @@ async function handleBingoComponent(interaction) {
       await interaction.reply({ content: 'Already closed.', flags: 64 });
       return true;
     }
+    const claimed = await bingo.claimStart(interaction.guildId, card.id);
+    if (!claimed.ok) {
+      await interaction.reply({ content: claimed.error, flags: 64 });
+      return true;
+    }
     await interaction.deferUpdate();
-    const { getDb } = require('../db/database');
-    await getDb().prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
-    await bingo.snapshotBaselines(card, interaction.guildId);
+    bingo.snapshotBaselines(card, interaction.guildId, { restamp: claimed.restamp }).catch(err => {
+      console.error(`Bingo baselines #${card.id}:`, err.message);
+    });
     const fresh = await bingo.getBingo(interaction.guildId, card.id);
     const msg = await interaction.followUp({
       content: 'Board is live. **Claim a tile** on the board, or `/bingo submit`. WOM tiles stamp themselves.',

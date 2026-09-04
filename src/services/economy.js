@@ -82,16 +82,28 @@ async function tell(client, userId, amount, reason, balance) {
   }
 }
 
-async function award(guildId, userId, reason, amount, client) {
+async function award(guildId, userId, reason, amount, client, refId) {
   const maybeClient = asClient(amount) || asClient(client);
   const n = asClient(amount) ? (REWARDS[reason] || 0) : (amount == null ? (REWARDS[reason] || 0) : amount);
+  let ref = refId;
+  if (ref == null && asClient(amount) && client != null && !asClient(client)) ref = client;
+  ref = ref == null || ref === '' ? null : String(ref);
   if (!guildId || !userId || !n) return await getBalance(guildId, userId);
   const db = getDb();
+  if (ref) {
+    const logged = await db.prepare(`
+      INSERT INTO economy_ledger (guild_id, user_id, amount, reason, ref_id)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(guild_id, user_id, reason, ref_id) DO NOTHING
+    `).run(guildId, userId, n, reason, ref);
+    if (!logged.changes) return await getBalance(guildId, userId);
+  } else {
+    await db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
+  }
   await db.prepare(`
     INSERT INTO economy_balances (guild_id, user_id, coins) VALUES (?, ?, ?)
     ON CONFLICT(guild_id, user_id) DO UPDATE SET coins = economy_balances.coins + excluded.coins
   `).run(guildId, userId, n);
-  await db.prepare('INSERT INTO economy_ledger (guild_id, user_id, amount, reason) VALUES (?, ?, ?, ?)').run(guildId, userId, n, reason);
   const balance = await getBalance(guildId, userId);
   if (maybeClient) tell(maybeClient, userId, n, reason, balance);
   return balance;

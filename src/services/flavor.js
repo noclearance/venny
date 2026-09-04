@@ -109,7 +109,16 @@ function venny(job, details = {}, extra = {}) {
   return { ...fallbackOf(job, details, extra), source: 'venny' };
 }
 
+let openaiChain = Promise.resolve();
+
 async function announce(job, details = {}, extra = {}) {
+  const run = () => announceNow(job, details, extra);
+  const next = openaiChain.then(run, run);
+  openaiChain = next.catch(() => {});
+  return next;
+}
+
+async function announceNow(job, details = {}, extra = {}) {
   const fallback = fallbackOf(job, details, extra);
   const key = (process.env.OPENAI_API_KEY || '').trim();
   if (!key) {

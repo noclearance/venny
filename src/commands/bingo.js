@@ -98,7 +98,8 @@ module.exports = {
       sub.setName('submit')
         .setDescription('Claim a tile you finished')
         .addIntegerOption(opt => opt.setName('slot').setDescription('Tile number starting at 1').setRequired(true).setMinValue(1).setMaxValue(25).setAutocomplete(true))
-        .addStringOption(opt => opt.setName('proof').setDescription('Screenshot link or what you got')))
+        .addStringOption(opt => opt.setName('proof').setDescription('Screenshot link or what you got'))
+        .addIntegerOption(opt => opt.setName('id').setDescription('Bingo board id if more than one exists')))
     .addSubcommand(sub =>
       sub.setName('verify')
         .setDescription('Approve someone else, or claim a tile the old way')
@@ -125,7 +126,7 @@ module.exports = {
     .setType(ApplicationCommandType.Message),
 
   staffSubs: ['create', 'start', 'pause', 'end', 'tile', 'template', 'import'],
-  publicSubs: ['create', 'start', 'board', 'end'],
+  publicSubs: ['create', 'start', 'board'],
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -230,9 +231,13 @@ module.exports = {
     }
 
     if (sub === 'start') {
-      await interaction.deferReply();
-      await db.prepare("UPDATE bingo_events SET status = 'active', started_at = datetime('now') WHERE id = ?").run(card.id);
-      await bingo.snapshotBaselines(card, interaction.guildId);
+      const claimed = await bingo.claimStart(interaction.guildId, card.id);
+      if (!claimed.ok) {
+        return interaction.reply({ content: claimed.error, flags: 64 });
+      }
+      bingo.snapshotBaselines(card, interaction.guildId, { restamp: claimed.restamp }).catch(err => {
+        console.error(`Bingo baselines #${card.id}:`, err.message);
+      });
       const fresh = await bingo.getBingo(interaction.guildId, card.id);
       const msg = await interaction.editReply({
         content: 'Board is live. **Claim a tile** on the board, or `/bingo submit`. WOM tiles stamp themselves.',
@@ -268,8 +273,13 @@ module.exports = {
     }
 
     if (sub === 'end') {
-      await db.prepare("UPDATE bingo_events SET status = 'ended', ended_at = datetime('now') WHERE id = ?").run(card.id);
-      return interaction.reply({ embeds: [await bingo.boardEmbed(await bingo.getBingo(interaction.guildId, card.id))] });
+      const { buildConfirmationRow } = require('../services/confirmations');
+      const row = buildConfirmationRow('bingo_end', String(card.id), interaction.user.id);
+      return interaction.reply({
+        content: `⚠️ **End bingo #${card.id}: ${card.title}?** Board locks.`,
+        components: [row],
+        flags: 64,
+      });
     }
 
     if (sub === 'tile') {

@@ -22,6 +22,27 @@ function secret() {
   return (process.env.BOT_SECRET || '').trim();
 }
 
+let warnedOff = false;
+function warnIfOff() {
+  if (secret()) return;
+  if (warnedOff) return;
+  warnedOff = true;
+  console.warn('Hub ingest off — set BOT_SECRET on Render');
+}
+
+const SECRET_KEY = /discord_token|bot_token|wom_verif|verification_code|openai|gemini|api_token|bot_secret|api_key/i;
+
+function stripSecrets(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(stripSecrets);
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (SECRET_KEY.test(k)) continue;
+    out[k] = (v && typeof v === 'object') ? stripSecrets(v) : v;
+  }
+  return out;
+}
+
 function validatePayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('payload must be a JSON object');
@@ -33,11 +54,14 @@ function validatePayload(payload) {
 }
 
 async function post(path, payload) {
-  if (!secret()) return { skipped: true, reason: 'no BOT_SECRET' };
+  if (!secret()) {
+    warnIfOff();
+    return { skipped: true, reason: 'no BOT_SECRET' };
+  }
 
   let body;
   try {
-    body = validatePayload(payload);
+    body = validatePayload(stripSecrets(payload));
   } catch (err) {
     console.warn(`AIS POST ${path}: invalid JSON (${err.message})`);
     return { ok: false, error: err.message };
@@ -109,5 +133,6 @@ module.exports = {
   ingestIncoming,
   classifyHook,
   baseUrl,
+  warnIfOff,
   ROUTES,
 };
