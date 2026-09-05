@@ -2,6 +2,11 @@ const { getDb } = require('../db/database');
 const { loadPlayer } = require('../osrs/snapshot');
 const { award } = require('./economy');
 const theme = require('./theme');
+const {
+  resolveConfiguredChannel,
+  clearConfiguredSlot,
+  isMissingDiscordChannel,
+} = require('./channelRouting');
 
 async function addXpGoal(guildId, userId, amount) {
   return (await getDb().prepare(`
@@ -54,11 +59,13 @@ async function checkMember(client, guildId, member) {
     }
   }
   if (hit.length) {
-    const settings = await db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
-    const channelId = settings?.announce_channel || settings?.reminder_channel;
-    if (channelId) {
+    const route = await resolveConfiguredChannel(client, guildId, {
+      slots: ['announce_channel'],
+      allowFallback: false,
+    });
+    if (route?.channel) {
       try {
-        const channel = await client.channels.fetch(channelId);
+        const channel = route.channel;
         for (const goal of hit) {
           const label = goal.kind === 'xp'
             ? `${goal.target.toLocaleString()} total XP`
@@ -75,6 +82,9 @@ async function checkMember(client, guildId, member) {
           });
         }
       } catch (err) {
+        if (isMissingDiscordChannel(err)) {
+          await clearConfiguredSlot(guildId, route.slot);
+        }
         console.error('Goal ping failed:', err.message);
       }
     }

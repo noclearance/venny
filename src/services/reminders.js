@@ -1,9 +1,11 @@
 // Reminder poller — checks for due events every 60 seconds and posts reminders
 const { getDb } = require('../db/database');
+const { resolveConfiguredChannel } = require('./channelRouting');
 
 const CHECK_INTERVAL = 60_000;
 const REMIND_AHEAD_MS = 15 * 60 * 1000;
 const REMIND_GRACE_MS = 30 * 60 * 1000;
+const SOTW_ENDING_SOON_MS = 24 * 60 * 60 * 1000;
 
 function startReminderPoller(client) {
   let running = false;
@@ -90,6 +92,12 @@ async function tick(client) {
     } catch (err) {
       console.error(`Failed to send reminder for event ${event.id}:`, err.message);
     }
+  }
+
+  try {
+    await sendSotwCadenceReminders(client, nowMs);
+  } catch (err) {
+    console.error('SOTW cadence reminders failed:', err.message);
   }
 
   const passedRecurring = await db.prepare(`
@@ -190,6 +198,198 @@ async function tick(client) {
     await require('./raffleRun').expireDue(client);
   } catch (err) {
     console.error('Raffle expire tick failed:', err.message);
+  }
+}
+
+function sotwWindow(sotw) {
+  const startMs = new Date(sotw?.starts_at || 0).getTime();
+  const endMs = new Date(sotw?.ends_at || 0).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  return {
+    startMs,
+    endMs,
+    midpointMs: startMs + Math.floor((endMs - startMs) / 2),
+  };
+}
+
+function shouldSendMidweekReminder(sotw, nowMs = Date.now()) {
+  if (Number(sotw?.midweek_reminder_sent || 0)) return false;
+  const window = sotwWindow(sotw);
+  if (!window) return false;
+  return nowMs >= window.midpointMs && nowMs < window.endMs;
+}
+
+function shouldSendEndingSoonReminder(sotw, nowMs = Date.now(), leadMs = SOTW_ENDING_SOON_MS) {
+  if (Number(sotw?.ending_soon_reminder_sent || 0)) return false;
+  const window = sotwWindow(sotw);
+  if (!window) return false;
+  return nowMs >= (window.endMs - leadMs) && nowMs < window.endMs;
+}
+
+async function resolveSotwReminderChannel(client, sotw) {
+  const route = await resolveConfiguredChannel(client, sotw.guild_id, {
+    slots: ['reminder_channel'],
+    allowFallback: false,
+  });
+  if (route?.channel) return route.channel;
+  if (!sotw.channel_id) return null;
+  try {
+    return await client.channels.fetch(sotw.channel_id);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchSotwStandingsSnapshot(sotw, limit = 5) {
+  const theme = require('./theme');
+  if (!sotw.wom_competition_id) {
+    return {
+      onBoard: 0,
+      rows: [],
+      url: null,
+      preview: 'Local SOTW is live in Discord only. A mod can run `/sotw update` to attach WOM standings.',
+    };
+  }
+
+  const url = `https://wiseoldman.net/competitions/${sotw.wom_competition_id}`;
+  try {
+    const wom = require('./wom');
+    const details = await wom.getCompetitionDetails(sotw.wom_competition_id);
+    const rows = (details.participations || [])
+      .filter(p => p.progress && p.progress.gained > 0)
+      .sort((a, b) => b.progress.gained - a.progress.gained);
+    const top = rows.slice(0, limit);
+    return {
+      onBoard: rows.length,
+      rows,
+      url,
+      preview: rows.length
+        ? theme.rankLines(top, p => `**${p.player.displayName}** — ${p.progress.gained.toLocaleString()} XP`)
+        : 'No XP gains on the board yet.',
+    };
+  } catch (err) {
+    return {
+      onBoard: 0,
+      rows: [],
+      url,
+      preview: 'Could not refresh WOM standings right now. Keep grinding and try `/sotw standings`.',
+      error: err.message,
+    };
+  }
+}
+
+async function postSotwMidweekReminder(client, sotw) {
+  const channel = await resolveSotwReminderChannel(client, sotw);
+  if (!channel) return false;
+  const subs = require('./subscriptions');
+  const ping = await subs.mentionFor({
+    guildId: sotw.guild_id,
+    category: 'sotw',
+    mode: 'category',
+    forReminder: true,
+  });
+  const snapshot = await fetchSotwStandingsSnapshot(sotw, 5);
+  const endTs = Math.floor(new Date(sotw.ends_at).getTime() / 1000);
+  const theme = require('./theme');
+  const cards = require('./cards');
+  const made = cards.venny('sotw', {
+    job: 'sotw_standings',
+    facts: { skill: sotw.skill, onBoard: snapshot.onBoard, checkpoint: 'midweek' },
+    fallbackTitle: `${sotw.skill} SOTW — mid-week standings`,
+    fallbackDescription: 'Halfway check-in for the active week.',
+    extraLines: [
+      snapshot.preview,
+      'Halfway mark reached. Keep grinding before the final stretch.',
+    ],
+    thumbnail: theme.skillIconUrl(sotw.skill),
+    url: snapshot.url || undefined,
+    fields: [
+      theme.field('Ends', `<t:${endTs}:R>`, true),
+      theme.field('On the board', String(snapshot.onBoard), true),
+    ],
+  });
+  const posted = await channel.send({
+    content: ping.content || undefined,
+    embeds: [made.embed],
+    allowedMentions: ping.allowedMentions,
+  });
+  cards.flavorLater(posted, made.flavor);
+  return true;
+}
+
+async function postSotwEndingSoonReminder(client, sotw) {
+  const channel = await resolveSotwReminderChannel(client, sotw);
+  if (!channel) return false;
+  const subs = require('./subscriptions');
+  const ping = await subs.mentionFor({
+    guildId: sotw.guild_id,
+    category: 'sotw',
+    mode: 'category',
+    forReminder: true,
+  });
+  const snapshot = await fetchSotwStandingsSnapshot(sotw, 3);
+  const endTs = Math.floor(new Date(sotw.ends_at).getTime() / 1000);
+  const theme = require('./theme');
+  const leader = snapshot.rows[0]
+    ? `Current leader: **${snapshot.rows[0].player.displayName}** — ${snapshot.rows[0].progress.gained.toLocaleString()} XP.`
+    : 'Board is still open — final push starts now.';
+  const cards = require('./cards');
+  const made = cards.venny('sotw', {
+    job: 'sotw_standings',
+    facts: { skill: sotw.skill, onBoard: snapshot.onBoard, checkpoint: 'ending_soon' },
+    fallbackTitle: `${sotw.skill} SOTW — ending soon`,
+    fallbackDescription: '24 hours left in the active SOTW window.',
+    extraLines: [
+      leader,
+      snapshot.preview,
+      'Update hiscores and lock in your final grind before the week closes.',
+    ],
+    thumbnail: theme.skillIconUrl(sotw.skill),
+    url: snapshot.url || undefined,
+    fields: [theme.field('Ends', `<t:${endTs}:R>`, true)],
+  });
+  const posted = await channel.send({
+    content: ping.content || undefined,
+    embeds: [made.embed],
+    allowedMentions: ping.allowedMentions,
+  });
+  cards.flavorLater(posted, made.flavor);
+  return true;
+}
+
+async function sendSotwCadenceReminders(client, nowMs = Date.now()) {
+  const db = getDb();
+  const now = new Date(nowMs).toISOString();
+  const active = await db.prepare(`
+    SELECT * FROM sotw
+    WHERE ended = 0
+      AND starts_at <= ?
+      AND ends_at > ?
+      AND (
+        COALESCE(midweek_reminder_sent, 0) = 0
+        OR COALESCE(ending_soon_reminder_sent, 0) = 0
+      )
+    ORDER BY id ASC
+  `).all(now, now);
+
+  for (const sotw of active) {
+    if (shouldSendMidweekReminder(sotw, nowMs)) {
+      try {
+        const sent = await postSotwMidweekReminder(client, sotw);
+        if (sent) await db.prepare('UPDATE sotw SET midweek_reminder_sent = 1 WHERE id = ?').run(sotw.id);
+      } catch (err) {
+        console.error(`SOTW #${sotw.id} mid-week reminder failed:`, err.message);
+      }
+    }
+
+    if (shouldSendEndingSoonReminder(sotw, nowMs, SOTW_ENDING_SOON_MS)) {
+      try {
+        const sent = await postSotwEndingSoonReminder(client, sotw);
+        if (sent) await db.prepare('UPDATE sotw SET ending_soon_reminder_sent = 1 WHERE id = ?').run(sotw.id);
+      } catch (err) {
+        console.error(`SOTW #${sotw.id} ending-soon reminder failed:`, err.message);
+      }
+    }
   }
 }
 
@@ -435,4 +635,11 @@ async function finalizePoll(client, poll) {
   }
 }
 
-module.exports = { startReminderPoller, finalizeSotw, finalizePoll };
+module.exports = {
+  startReminderPoller,
+  finalizeSotw,
+  finalizePoll,
+  sotwWindow,
+  shouldSendMidweekReminder,
+  shouldSendEndingSoonReminder,
+};

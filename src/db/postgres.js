@@ -128,6 +128,8 @@ async function initPostgres(db) {
       created_by TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       ended INTEGER DEFAULT 0,
+      midweek_reminder_sent INTEGER DEFAULT 0,
+      ending_soon_reminder_sent INTEGER DEFAULT 0,
       winner_rsn TEXT
     );
     CREATE TABLE IF NOT EXISTS sotw_winners (
@@ -375,6 +377,8 @@ async function initPostgres(db) {
   await migrateColumn(db, 'events', 'ping_mode', "TEXT DEFAULT 'category'");
   await migrateColumn(db, 'events', 'ping_role_id', 'TEXT');
   await migrateColumn(db, 'sotw', 'finalize_error', 'TEXT');
+  await migrateColumn(db, 'sotw', 'midweek_reminder_sent', 'INTEGER DEFAULT 0');
+  await migrateColumn(db, 'sotw', 'ending_soon_reminder_sent', 'INTEGER DEFAULT 0');
   await migrateColumn(db, 'economy_ledger', 'ref_id', 'TEXT');
   try {
     await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sotw_winners_sotw_id ON sotw_winners (sotw_id)');

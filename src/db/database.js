@@ -181,6 +181,8 @@ async function initDb() {
       created_by      TEXT NOT NULL,
       created_at      TEXT DEFAULT (datetime('now')),
       ended           INTEGER DEFAULT 0,
+      midweek_reminder_sent INTEGER DEFAULT 0,
+      ending_soon_reminder_sent INTEGER DEFAULT 0,
       winner_rsn      TEXT,
       FOREIGN KEY (guild_id) REFERENCES guild_settings(guild_id)
     );
@@ -472,6 +474,8 @@ async function initDb() {
   await migrateColumn(db, 'events', 'ping_mode', "TEXT DEFAULT 'category'");
   await migrateColumn(db, 'events', 'ping_role_id', 'TEXT');
   await migrateColumn(db, 'sotw', 'finalize_error', 'TEXT');
+  await migrateColumn(db, 'sotw', 'midweek_reminder_sent', 'INTEGER DEFAULT 0');
+  await migrateColumn(db, 'sotw', 'ending_soon_reminder_sent', 'INTEGER DEFAULT 0');
   await migrateColumn(db, 'economy_ledger', 'ref_id', 'TEXT');
   await tryExec(db, 'CREATE UNIQUE INDEX IF NOT EXISTS sotw_winners_sotw_id ON sotw_winners(sotw_id)');
   await tryExec(db, 'CREATE UNIQUE INDEX IF NOT EXISTS economy_ledger_once ON economy_ledger(guild_id, user_id, reason, ref_id)');

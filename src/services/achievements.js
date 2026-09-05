@@ -2,6 +2,11 @@ const { getDb } = require('../db/database');
 const theme = require('./theme');
 const { prettyMetric, KC_MILESTONES, CLOG_MILESTONES, XP_FOR_120 } = require('../osrs/catalog');
 const { award } = require('./economy');
+const {
+  resolveConfiguredChannel,
+  clearConfiguredSlot,
+  isMissingDiscordChannel,
+} = require('./channelRouting');
 
 async function record(guildId, userId, rsn, key, title, kind, client, { silent = false } = {}) {
   const db = getDb();
@@ -100,16 +105,21 @@ function embedFor(item, userTag) {
 async function announce(client, guildId, items, userId) {
   if (!items.length) return;
   const db = getDb();
-  const settings = await db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
-  const channelId = settings?.announce_channel || settings?.reminder_channel;
-  if (!channelId) return;
+  const route = await resolveConfiguredChannel(client, guildId, {
+    slots: ['announce_channel'],
+    allowFallback: false,
+  });
+  if (!route?.channel) return;
   try {
-    const channel = await client.channels.fetch(channelId);
+    const channel = route.channel;
     for (const item of items) {
       await channel.send({ content: `<@${userId}>`, embeds: [embedFor(item, `<@${userId}>`)] });
       await db.prepare('UPDATE achievements SET announced = 1 WHERE guild_id = ? AND user_id = ? AND key = ?').run(guildId, userId, item.key);
     }
   } catch (err) {
+    if (isMissingDiscordChannel(err)) {
+      await clearConfiguredSlot(guildId, route.slot);
+    }
     console.error('Achievement announce failed:', err.message);
   }
 }

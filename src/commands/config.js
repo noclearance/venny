@@ -3,6 +3,7 @@ const { getDb } = require('../db/database');
 const { isAdmin, ADMIN_PERMISSION } = require('../services/permissions');
 const { isValidTimezone } = require('../services/timezone');
 const { audit } = require('../services/audit');
+const { inspectConfiguredChannels } = require('../services/channelRouting');
 
 const CHANNEL_SLOTS = [
   {
@@ -37,6 +38,20 @@ function missingChannelSlots(settings = {}) {
 
 function assignedChannelSlots(settings = {}) {
   return CHANNEL_SLOTS.filter(slot => settings[slot.key]);
+}
+
+function slotByKey(key) {
+  return CHANNEL_SLOTS.find(slot => slot.key === key) || null;
+}
+
+function channelHealthLine(report) {
+  const slot = slotByKey(report.slot);
+  if (!slot || report.status === 'ok' || report.status === 'unset') return null;
+  const detail = String(report.detail || (report.status === 'invalid' ? 'Unknown Channel or Missing Access' : 'channel check failed'))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return `• ${slot.auditCopy}: <#${report.channelId}> is unreachable (${detail}). Use \`/config clear-channel\` then \`/config ${slot.sub}\`.`;
 }
 
 function buildData(settings = {}) {
@@ -216,6 +231,12 @@ module.exports = {
     if (sub === 'view') {
       const settings = await db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?').get(interaction.guildId) || {};
       const missing = missingChannelSlots(settings);
+      const reports = await inspectConfiguredChannels(
+        interaction.client,
+        interaction.guildId,
+        CHANNEL_SLOTS.map(slot => slot.key),
+      );
+      const health = reports.map(channelHealthLine).filter(Boolean);
 
       let response = '**Server Configuration:**\n\n';
       response += `WOM Group ID: ${settings.wom_group_id || 'Not set'}\n`;
@@ -233,6 +254,10 @@ module.exports = {
 
       if (settings.wom_group_id) {
         response += `\n[WOM Group Page](https://wiseoldman.net/groups/${settings.wom_group_id})`;
+      }
+
+      if (health.length) {
+        response += `\n\n⚠️ Channel health:\n${health.join('\n')}`;
       }
 
       await interaction.reply({ content: response, flags: 64 });
