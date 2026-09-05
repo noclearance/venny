@@ -24,7 +24,7 @@ function translateSql(sql) {
 function coerceRow(row) {
   if (!row) return undefined;
   const out = { ...row };
-  for (const key of ['id', 'count', 'coins', 'amount', 'changes', 'points', 'ticket_gp', 'sotw_duration', 'auto_start', 'finalized', 'drawn', 'ended', 'reminder_sent', 'next_created', 'cancelled', 'reached', 'announced', 'size', 'slot', 'bingo_id', 'tile_id', 'team_id', 'event_id', 'raffle_id', 'sotw_id', 'wom_id', 'wom_group_id', 'wom_competition_id', 'parent_event_id', 'source_poll_id', 'xp_gained', 'weight', 'target', 'duration_days']) {
+  for (const key of ['id', 'count', 'coins', 'amount', 'changes', 'points', 'ticket_gp', 'sotw_duration', 'auto_start', 'finalized', 'drawn', 'ended', 'midweek_reminder_sent', 'ending_soon_reminder_sent', 'reminder_sent', 'next_created', 'cancelled', 'reached', 'announced', 'size', 'slot', 'bingo_id', 'tile_id', 'team_id', 'event_id', 'raffle_id', 'sotw_id', 'wom_id', 'wom_group_id', 'wom_competition_id', 'parent_event_id', 'source_poll_id', 'xp_gained', 'weight', 'target', 'duration_days']) {
     if (out[key] != null && typeof out[key] === 'string' && /^-?\d+$/.test(out[key])) {
       out[key] = Number(out[key]);
     }

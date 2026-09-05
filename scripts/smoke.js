@@ -272,6 +272,50 @@ check('config hides assigned channel setters', () => {
   assert(subs.includes('clear-channel'));
 });
 
+check('sotw checkpoint reminders gate at midpoint and final 24h', () => {
+  const { shouldSendMidweekReminder, shouldSendEndingSoonReminder } = require('../src/services/reminders');
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const window = {
+    starts_at: new Date(now - (4 * day)).toISOString(),
+    ends_at: new Date(now + (3 * day)).toISOString(),
+    midweek_reminder_sent: 0,
+    ending_soon_reminder_sent: 0,
+  };
+  assert.strictEqual(shouldSendMidweekReminder(window, now), true);
+  assert.strictEqual(shouldSendMidweekReminder({ ...window, midweek_reminder_sent: 1 }, now), false);
+  assert.strictEqual(shouldSendMidweekReminder(window, now - (2 * day)), false);
+  assert.strictEqual(shouldSendEndingSoonReminder(window, now), false);
+  const lastDay = new Date(window.ends_at).getTime() - (23 * 60 * 60 * 1000);
+  assert.strictEqual(shouldSendEndingSoonReminder(window, lastDay), true);
+  assert.strictEqual(shouldSendEndingSoonReminder({ ...window, ending_soon_reminder_sent: 1 }, lastDay), false);
+});
+
+check('channel routing requires explicit fallback policy', () => {
+  const { pickConfiguredSlots } = require('../src/services/channelRouting');
+  const settings = { announce_channel: '11', reminder_channel: '22' };
+  assert.deepStrictEqual(
+    pickConfiguredSlots(settings, ['announce_channel', 'reminder_channel'], { allowFallback: false }),
+    ['announce_channel'],
+  );
+  assert.deepStrictEqual(
+    pickConfiguredSlots(settings, ['announce_channel', 'reminder_channel'], { allowFallback: true }),
+    ['announce_channel', 'reminder_channel'],
+  );
+});
+
+check('announce broadcast no longer falls back to reminder slot', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/announce.js'), 'utf8');
+  assert(src.includes("slots: ['announce_channel']"));
+  assert(!src.includes('announce_channel || settings?.reminder_channel'));
+});
+
+check('config view reports configured channel health', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/commands/config.js'), 'utf8');
+  assert(src.includes('inspectConfiguredChannels'));
+  assert(src.includes('Channel health'));
+});
+
 check('boss has week and end', () => {
   const boss = loaded.find(c => c.json.name === 'boss');
   const subs = (boss.json.options || []).map(o => o.name);
@@ -353,6 +397,90 @@ check('joinDescription skips duplicate notes', () => {
 });
 
 (async () => {
+  await checkAsync('stale configured channel clears exact slot and does not drift', async () => {
+    const { resolveConfiguredChannel } = require('../src/services/channelRouting');
+    const stale = new Error('Unknown Channel');
+    stale.code = 10003;
+    const fetched = [];
+    const cleared = [];
+    const settings = { announce_channel: '100', reminder_channel: '200' };
+    const db = {
+      prepare(sql) {
+        return {
+          get: async () => ({ ...settings }),
+          run: async () => {
+            if (sql.includes('announce_channel')) {
+              settings.announce_channel = null;
+              cleared.push('announce_channel');
+            }
+            if (sql.includes('reminder_channel')) {
+              settings.reminder_channel = null;
+              cleared.push('reminder_channel');
+            }
+            return { changes: 1 };
+          },
+        };
+      },
+    };
+    const client = {
+      channels: {
+        fetch: async id => {
+          fetched.push(id);
+          if (id === '100') throw stale;
+          return { id, send: async () => ({ id: 'x' }) };
+        },
+      },
+    };
+
+    const strict = await resolveConfiguredChannel(client, 'guild', {
+      slots: ['announce_channel', 'reminder_channel'],
+      allowFallback: false,
+      db,
+    });
+    assert.strictEqual(strict, null);
+    assert.deepStrictEqual(fetched, ['100']);
+    assert.deepStrictEqual(cleared, ['announce_channel']);
+
+    const fetched2 = [];
+    const cleared2 = [];
+    const settings2 = { announce_channel: '100', reminder_channel: '200' };
+    const db2 = {
+      prepare(sql) {
+        return {
+          get: async () => ({ ...settings2 }),
+          run: async () => {
+            if (sql.includes('announce_channel')) {
+              settings2.announce_channel = null;
+              cleared2.push('announce_channel');
+            }
+            if (sql.includes('reminder_channel')) {
+              settings2.reminder_channel = null;
+              cleared2.push('reminder_channel');
+            }
+            return { changes: 1 };
+          },
+        };
+      },
+    };
+    const client2 = {
+      channels: {
+        fetch: async id => {
+          fetched2.push(id);
+          if (id === '100') throw stale;
+          return { id, send: async () => ({ id: 'y' }) };
+        },
+      },
+    };
+    const withFallback = await resolveConfiguredChannel(client2, 'guild', {
+      slots: ['announce_channel', 'reminder_channel'],
+      allowFallback: true,
+      db: db2,
+    });
+    assert.strictEqual(withFallback.slot, 'reminder_channel');
+    assert.deepStrictEqual(fetched2, ['100', '200']);
+    assert.deepStrictEqual(cleared2, ['announce_channel']);
+  });
+
   await checkAsync('mentionFor everyone is launch-only', async () => {
     const { mentionFor } = require('../src/services/subscriptions');
     const launch = await mentionFor({ mode: 'everyone' });

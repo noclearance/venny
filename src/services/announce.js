@@ -1,5 +1,9 @@
-const { getDb } = require('../db/database');
 const theme = require('./theme');
+const {
+  resolveConfiguredChannel,
+  clearConfiguredSlot,
+  isMissingDiscordChannel,
+} = require('./channelRouting');
 
 function jumpUrl(guildId, channelId, messageId) {
   if (!guildId || !channelId || !messageId) return null;
@@ -17,10 +21,12 @@ async function broadcast(client, guildId, {
   mention,
 } = {}) {
   if (!client || !guildId) return null;
-  const settings = await getDb().prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(guildId);
-  const channelId = settings?.announce_channel || settings?.reminder_channel;
-  if (!channelId) return null;
-  if (sourceChannelId && String(sourceChannelId) === String(channelId)) return null;
+  const route = await resolveConfiguredChannel(client, guildId, {
+    slots: ['announce_channel'],
+    allowFallback: false,
+  });
+  if (!route?.channelId) return null;
+  if (sourceChannelId && String(sourceChannelId) === String(route.channelId)) return null;
 
   const face = json || { title, description };
   const jump = jumpUrl(guildId, sourceChannelId, sourceMessageId);
@@ -28,7 +34,7 @@ async function broadcast(client, guildId, {
   if (jump) extra.push(theme.field('Details', `[Click here to view the event!](${jump})`));
 
   try {
-    const channel = await client.channels.fetch(channelId);
+    const channel = route.channel;
     const ping = mention && typeof mention === 'object'
       ? mention
       : { content: mention || undefined, allowedMentions: mention ? { parse: ['roles', 'users'] } : { parse: [] } };
@@ -43,8 +49,8 @@ async function broadcast(client, guildId, {
     });
   } catch (err) {
     console.warn(`Announce channel failed: ${err.message}`);
-    if (/Missing Access|Unknown Channel|Missing Permissions/i.test(err.message || '')) {
-      await getDb().prepare('UPDATE guild_settings SET announce_channel = NULL WHERE guild_id = ?').run(guildId);
+    if (isMissingDiscordChannel(err)) {
+      await clearConfiguredSlot(guildId, route.slot);
     }
     return null;
   }

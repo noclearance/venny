@@ -3,6 +3,11 @@ const achievements = require('./achievements');
 const goals = require('./goals');
 const bingo = require('./bingo');
 const live = require('./live');
+const {
+  resolveConfiguredChannel,
+  clearConfiguredSlot,
+  isMissingDiscordChannel,
+} = require('./channelRouting');
 
 let lastId = 0;
 let lastLive = 0;
@@ -30,17 +35,24 @@ async function tickTracker(client) {
 
     const card = await bingo.activeBingo(member.guild_id);
     if (card && card.status === 'active') {
+      let announceRoute = null;
       try {
         const done = await bingo.autoCheckMember(card, member, client);
         if (done.length) {
-          const settings = await db.prepare('SELECT announce_channel, reminder_channel FROM guild_settings WHERE guild_id = ?').get(member.guild_id);
-          const channelId = card.channel_id || settings?.announce_channel || settings?.reminder_channel;
-          if (channelId) {
-            const channel = await client.channels.fetch(channelId);
+          const channel = card.channel_id
+            ? await client.channels.fetch(card.channel_id)
+            : ((announceRoute = await resolveConfiguredChannel(client, member.guild_id, {
+                slots: ['announce_channel'],
+                allowFallback: false,
+              }))?.channel || null);
+          if (channel) {
             await channel.send(`🟩 <@${member.user_id}> stamped **${done.map(t => t.label).join(', ')}** on **${card.title}**.`);
           }
         }
       } catch (err) {
+        if (announceRoute?.slot && isMissingDiscordChannel(err)) {
+          await clearConfiguredSlot(member.guild_id, announceRoute.slot);
+        }
         console.error(`Bingo check ${member.rsn}:`, err.message);
       }
     }
