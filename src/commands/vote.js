@@ -296,12 +296,25 @@ function shuffle(list) {
   return copy;
 }
 
+function firstNUnique(values, limit) {
+  const seen = new Set();
+  const out = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 async function rollSkills(guildId, count) {
   const pool = wom.SKILLS.filter(s => !SKIP_RANDOM.has(s));
-  const recent = (await getDb().prepare(`
-    SELECT DISTINCT lower(skill) as skill FROM sotw_winners
-    WHERE guild_id = ? ORDER BY id DESC LIMIT 8
-  `).all(guildId)).map(r => r.skill);
+  const recentRows = await getDb().prepare(`
+    SELECT lower(skill) as skill FROM sotw_winners
+    WHERE guild_id = ? ORDER BY id DESC LIMIT 32
+  `).all(guildId);
+  const recent = firstNUnique(recentRows.map(r => r.skill), 8);
   let candidates = pool.filter(s => !recent.includes(s));
   if (candidates.length < count) candidates = [...pool];
   return shuffle(candidates).slice(0, count);
@@ -312,16 +325,17 @@ async function rollBosses(guildId, count) {
   const { BOSS_CHOICES, prettyMetric } = require('../osrs/catalog');
   const pool = BOSS_CHOICES.map(c => c.value);
   const recentRows = await getDb().prepare(`
-    SELECT DISTINCT lower(boss) as boss FROM botw
-    WHERE guild_id = ? ORDER BY id DESC LIMIT 8
+    SELECT lower(boss) as boss FROM botw
+    WHERE guild_id = ? ORDER BY id DESC LIMIT 32
   `).all(guildId);
   const pollRows = await getDb().prepare(`
     SELECT winner FROM polls
     WHERE guild_id = ? AND type = 'botw' AND finalized = 1 AND winner IS NOT NULL
     ORDER BY id DESC LIMIT 8
   `).all(guildId);
+  const recentBosses = firstNUnique(recentRows.map(r => r.boss), 8);
   const recent = new Set([
-    ...recentRows.map(r => r.boss),
+    ...recentBosses,
     ...pollRows.map(r => String(r.winner || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')),
   ]);
   let candidates = pool.filter(b => !recent.has(b));
