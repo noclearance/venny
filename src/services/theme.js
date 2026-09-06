@@ -175,7 +175,23 @@ const KIND_THUMB = {
   raffle: 'https://oldschool.runescape.wiki/images/Casket.png',
   event: 'https://oldschool.runescape.wiki/images/Map_link_icon.png',
   poll: 'https://oldschool.runescape.wiki/images/Skull_sceptre.png',
+  danger: 'https://oldschool.runescape.wiki/images/Slayer_icon.png',
+  achieve: 'https://oldschool.runescape.wiki/images/Collection_log.png',
 };
+
+function bossArtUrl(boss) {
+  const raw = String(boss || '').trim();
+  if (!raw) return KIND_THUMB.danger;
+  const pretty = raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/ /g, '_');
+  return `https://oldschool.runescape.wiki/images/${encodeURIComponent(pretty)}.png`;
+}
+
+function orderFields(fields) {
+  const list = (fields || []).filter(Boolean);
+  const prize = list.filter(f => f.name === 'Prize');
+  const rest = list.filter(f => f.name !== 'Prize');
+  return [...prize, ...rest];
+}
 
 function embed(kind, {
   title,
@@ -187,11 +203,8 @@ function embed(kind, {
   author,
   footer,
   timestamp = false,
-  color,
 } = {}) {
-  const built = new EmbedBuilder().setColor(
-    Number.isInteger(color) ? color : (COLORS[kind] || COLORS.brand)
-  );
+  const built = new EmbedBuilder().setColor(COLORS[kind] || COLORS.brand);
   const face = KIND_FACE[kind] || KIND_FACE.brand;
 
   const who = author === false
@@ -206,7 +219,8 @@ function embed(kind, {
   else if (KIND_THUMB[kind]) built.setThumbnail(KIND_THUMB[kind]);
   else if (kind === 'sotw') built.setThumbnail(skillIconUrl('overall'));
   if (image) built.setImage(image);
-  if (fields && fields.length) built.addFields(fields.filter(Boolean));
+  const stacked = orderFields(fields);
+  if (stacked.length) built.addFields(stacked);
   if (timestamp) built.setTimestamp();
   built.setFooter({ text: footer || `${face.tag}  ·  Misclickers` });
 
@@ -219,7 +233,7 @@ function fromJson(kind, json = {}, extras = {}) {
     ...extras,
     title: json.title || extras.title,
     description: json.description || extras.description,
-    color: json.color,
+    color: undefined,
   });
 }
 
@@ -236,6 +250,8 @@ module.exports = {
   line,
   when,
   skillIconUrl,
+  bossArtUrl,
+  orderFields,
   medal,
   rankLines,
   field,

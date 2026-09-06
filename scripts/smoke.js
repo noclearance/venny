@@ -574,6 +574,19 @@ check('joinDescription skips duplicate notes', () => {
     assert(!src.includes("cards').venny('sotw'"));
   });
 
+  check('card frame uses palette and prize-first fields', () => {
+    const wild = theme.fromJson('sotw', {
+      title: 'Unique week',
+      description: 'Rally.',
+      color: 1,
+    }, {
+      fields: [theme.field('Ends', 'soon', true), theme.prizeField('bond')],
+    });
+    assert.strictEqual(wild.data.color, theme.COLORS.sotw);
+    assert.strictEqual(wild.data.fields[0].name, 'Prize');
+    assert.strictEqual(theme.bossArtUrl('nex').includes('Nex'), true);
+  });
+
   check('flavor uses SpaceXAI grok-4.5', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/flavor.js'), 'utf8');
     assert(src.includes('https://api.x.ai/v1/chat/completions'));

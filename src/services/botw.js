@@ -74,7 +74,7 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
       `KC from this second until ${theme.when(endsAt)} counts on Wise Old Man group gained.`,
       `Board: \`/boss kc\` or \`/boss week\` with no boss name.`,
     ],
-    thumbnail: theme.skillIconUrl('slayer'),
+    thumbnail: theme.bossArtUrl(key),
     fields: [
       theme.prizeField(economy.prizeLine('botw_win', loot)),
       theme.field('Boss', prettyMetric(key), true),
@@ -133,7 +133,7 @@ async function finalizeBotw(client, botw) {
     fallbackTitle: `BOTW · ${prettyMetric(botw.boss)} — results`,
     fallbackDescription: 'Hunt is closed. Board below is final.',
     extraLines: [board],
-    thumbnail: theme.skillIconUrl('slayer'),
+    thumbnail: theme.bossArtUrl(botw.boss),
     fields,
   });
 
