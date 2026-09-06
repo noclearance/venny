@@ -96,7 +96,7 @@ module.exports = {
       }
       try {
         const { createMass, afterPosted } = require('../services/eventRun');
-        const { event, payload } = await createMass({
+        const { event, payload, made } = await createMass({
           client: interaction.client,
           guildId: interaction.guildId,
           channel,
@@ -121,7 +121,7 @@ module.exports = {
           allowedMentions: launch.allowedMentions,
         });
         const reply = await interaction.fetchReply();
-        await afterPosted(interaction.client, interaction.guildId, event, reply, interaction.user.id);
+        await afterPosted(interaction.client, interaction.guildId, event, reply, interaction.user.id, made);
       } catch (err) {
         return commandFail(interaction, err);
       }
@@ -174,7 +174,7 @@ module.exports = {
         });
       const made = await require('../services/cards').make('event', {
         job: 'event_remind',
-        facts: { title: event.title, category: event.category || 'general', alreadyReminded },
+        facts: { title: event.title, category: event.category || 'general', alreadyReminded, seed: event.id },
         fallbackTitle: event.title,
         fallbackDescription: event.description || theme.line('eventSoon', event.id),
         extraLines: [

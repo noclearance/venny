@@ -247,7 +247,7 @@ module.exports = {
       await bingo.saveMessage(card.id, interaction.channelId, msg.id);
       const made = await require('../services/cards').make('raffle', {
         job: 'bingo_start',
-        facts: { title: fresh.title },
+        facts: { title: fresh.title, seed: fresh.id },
         fallbackTitle: `${fresh.title} is live`,
         fallbackDescription: 'Bingo is up. Claim a tile on the board, or `/bingo submit`. WOM tiles stamp themselves.',
       });

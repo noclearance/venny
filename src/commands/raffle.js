@@ -143,9 +143,9 @@ module.exports = {
         theme.field('Odds', weightMode !== 'none' ? `Weighted by ${weightMode}` : 'Equal', true),
         theme.field('How to enter', how),
       ];
-      const made = require('../services/cards').venny('raffle', {
+      const made = await require('../services/cards').make('raffle', {
         job: 'raffle_start',
-        facts: { title, prize: loot || null, weighted: weightMode !== 'none', hours },
+        facts: { title, prize: loot || null, weighted: weightMode !== 'none', hours, seed: raffleId },
         fallbackTitle: title,
         fallbackDescription: theme.line('raffleOpen', raffleId),
         fields,
@@ -166,7 +166,7 @@ module.exports = {
         fetchReply: true,
       });
       const cards = require('../services/cards');
-      const announced = await cards.publish(interaction.client, interaction.guildId, {
+      await cards.publish(interaction.client, interaction.guildId, {
         kind: 'raffle',
         json: made.json,
         fields: [
@@ -178,7 +178,6 @@ module.exports = {
         sourceChannelId: reply.channelId,
         sourceMessageId: reply.id,
       });
-      cards.flavorLater(reply, made.flavor, announced);
       await audit(interaction.client, interaction.guildId, `Raffle #${raffleId} **${title}** created by <@${interaction.user.id}>`);
       return;
     }

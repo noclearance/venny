@@ -168,9 +168,9 @@ async function startSotw({ guildId, channelId, createdBy, skill, durationDays = 
   const theme = require('./theme');
   const economy = require('./economy');
   const windowDays = Math.max(1, Math.round((new Date(sotw.ends_at) - new Date(sotw.starts_at)) / 86400000)) || durationDays;
-  const made = require('./cards').venny('sotw', {
+  const made = await require('./cards').make('sotw', {
     job: 'sotw_start',
-    facts: { skill: sotw.skill, days: windowDays, wom: Boolean(sotw.wom_competition_id), prize: loot || null },
+    facts: { skill: sotw.skill, days: windowDays, wom: Boolean(sotw.wom_competition_id), prize: loot || null, seed: sotw.id },
     fallbackTitle: `${sotw.skill} SOTW`,
     fallbackDescription: theme.line('sotwOpen', sotw.id),
     extraLines: [tracking],

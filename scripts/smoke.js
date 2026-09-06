@@ -568,6 +568,12 @@ check('joinDescription skips duplicate notes', () => {
     assert(card.title);
   });
 
+  check('sotw start awaits unique card not canned-first', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/sotw.js'), 'utf8');
+    assert(src.includes("cards').make('sotw'"));
+    assert(!src.includes("cards').venny('sotw'"));
+  });
+
   check('flavor uses SpaceXAI grok-4.5', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/flavor.js'), 'utf8');
     assert(src.includes('https://api.x.ai/v1/chat/completions'));

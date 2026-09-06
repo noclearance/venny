@@ -68,27 +68,33 @@ async function tick(client) {
         forReminder: true,
       });
 
-      const economy = require('./economy');
-      const made = require('./cards').venny('event', {
-        job: started ? 'event_now' : 'event_soon',
-        facts: { title: event.title, category: event.category || 'general', started },
-        fallbackTitle: event.title,
-        fallbackDescription: event.description || theme.line(started ? 'eventNow' : 'eventSoon', event.id),
-        extraLines: [
-          event.description || null,
-          theme.when(event.event_time),
-          started ? 'It’s up. Get in.' : 'Fifteen minutes. If you’re coming, be logged in.',
-        ],
-        fields: [theme.field('Guild credits', economy.payNote('event_rsvp'))],
-      });
-      const posted = await channel.send({
-        content: ping.content,
-        embeds: [made.embed],
-        allowedMentions: ping.allowedMentions,
-      });
+      const claimed = await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ? AND reminder_sent = 0').run(event.id);
+      if (!claimed.changes) continue;
 
-      await db.prepare('UPDATE events SET reminder_sent = 1 WHERE id = ?').run(event.id);
-      require('./cards').flavorLater(posted, made.flavor);
+      const economy = require('./economy');
+      const job = started ? 'event_now' : 'event_soon';
+      const pingCopy = ping;
+      const channelCopy = channel;
+      const extraLines = [
+        event.description || null,
+        theme.when(event.event_time),
+        started ? 'It’s up. Get in.' : 'Fifteen minutes. If you’re coming, be logged in.',
+      ];
+      const fields = [theme.field('Guild credits', economy.payNote('event_rsvp'))];
+      require('./cards').make('event', {
+        job,
+        facts: { title: event.title, category: event.category || 'general', started, seed: `${event.id}-${job}` },
+        fallbackTitle: event.title,
+        fallbackDescription: event.description || theme.line(job === 'event_now' ? 'eventNow' : 'eventSoon', event.id),
+        extraLines,
+        fields,
+      }).then(made => channelCopy.send({
+        content: pingCopy.content,
+        embeds: [made.embed],
+        allowedMentions: pingCopy.allowedMentions,
+      })).catch(err => {
+        console.error(`Failed to send reminder for event ${event.id}:`, err.message);
+      });
     } catch (err) {
       console.error(`Failed to send reminder for event ${event.id}:`, err.message);
     }
@@ -440,7 +446,8 @@ async function finalizeSotw(client, sotw) {
         theme.prizeField(economy.prizeLine('sotw_win', loot)),
         winnerRsn ? theme.field('Winner', winnerRsn) : null,
       ];
-      const made = require('./cards').venny('sotw', {
+      const cards = require('./cards');
+      const made = await cards.make('sotw', {
         job: 'sotw_end',
         facts: {
           skill: sotw.skill,
@@ -448,6 +455,7 @@ async function finalizeSotw(client, sotw) {
           xp: xpGained || null,
           placed: sorted.length,
           prize: loot || null,
+          seed: sotw.id,
         },
         fallbackTitle: `${sotw.skill} SOTW — results`,
         fallbackDescription: theme.line('sotwEnded', sotw.id),
@@ -459,15 +467,13 @@ async function finalizeSotw(client, sotw) {
         fields,
       });
       const posted = await channel.send({ embeds: [made.embed] });
-      const cards = require('./cards');
-      const announced = await cards.publish(client, sotw.guild_id, {
+      await cards.publish(client, sotw.guild_id, {
         kind: 'sotw',
         json: made.json,
         fields,
         sourceChannelId: posted.channelId,
         sourceMessageId: posted.id,
       });
-      cards.flavorLater(posted, made.flavor, announced);
     }
   } catch (err) {
     console.error(`SOTW #${sotw.id} result post:`, err.message);
@@ -514,9 +520,8 @@ async function publishAutoStart(client, channel, poll, winner, results, { label,
     ? { content: `${results}\n\n**${winner}** won. ${liveLine}`, embeds: [started.embed] }
     : { content: `${results}\n\n${started.response}` });
   const cards = require('./cards');
-  let announced = null;
   if (started.card) {
-    announced = await cards.publish(client, poll.guild_id, {
+    await cards.publish(client, poll.guild_id, {
       kind,
       json: started.card,
       extraLines,
@@ -525,7 +530,6 @@ async function publishAutoStart(client, channel, poll, winner, results, { label,
       sourceMessageId: posted.id,
     });
   }
-  if (started.flavor) cards.flavorLater(posted, started.flavor, announced);
   return true;
 }
 

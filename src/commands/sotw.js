@@ -138,7 +138,7 @@ module.exports = {
         ? { content: ping.content, embeds: [result.embed], allowedMentions: ping.allowedMentions }
         : result.response);
       const cards = require('../services/cards');
-      const announced = await cards.publish(interaction.client, interaction.guildId, {
+      await cards.publish(interaction.client, interaction.guildId, {
         kind: 'sotw',
         json: result.card,
         extraLines: [result.tracking],
@@ -147,7 +147,6 @@ module.exports = {
         sourceMessageId: posted.id,
         mention: ping,
       });
-      cards.flavorLater(posted, result.flavor, announced);
       await audit(interaction.client, interaction.guildId, `SOTW #${result.sotwId} **${skill}** started by <@${interaction.user.id}>`);
       return;
     }

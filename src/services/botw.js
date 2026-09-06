@@ -65,9 +65,9 @@ async function startBotw({ guildId, channelId, createdBy, boss, durationDays = 7
 
   const theme = require('./theme');
   const economy = require('./economy');
-  const made = require('./cards').venny('danger', {
+  const made = await require('./cards').make('danger', {
     job: 'botw_start',
-    facts: { boss: prettyMetric(key), days: durationDays, prize: loot || null },
+    facts: { boss: prettyMetric(key), days: durationDays, prize: loot || null, seed: result.lastInsertRowid },
     fallbackTitle: `BOTW · ${prettyMetric(key)}`,
     fallbackDescription: 'KC from this second counts.',
     extraLines: [
@@ -126,9 +126,10 @@ async function finalizeBotw(client, botw) {
     theme.prizeField(economy.prizeLine('botw_win', loot)),
     winnerRsn ? theme.field('Winner', winnerRsn) : null,
   ];
-  const made = require('./cards').venny('danger', {
+  const cards = require('./cards');
+  const made = await cards.make('danger', {
     job: 'botw_end',
-    facts: { boss: prettyMetric(botw.boss), winner: winnerRsn, prize: loot || null },
+    facts: { boss: prettyMetric(botw.boss), winner: winnerRsn, prize: loot || null, seed: botw.id },
     fallbackTitle: `BOTW · ${prettyMetric(botw.boss)} — results`,
     fallbackDescription: 'Hunt is closed. Board below is final.',
     extraLines: [board],
@@ -138,15 +139,13 @@ async function finalizeBotw(client, botw) {
 
   const channel = await client.channels.fetch(botw.channel_id);
   const posted = await channel.send({ embeds: [made.embed] });
-  const cards = require('./cards');
-  const announced = await cards.publish(client, botw.guild_id, {
+  await cards.publish(client, botw.guild_id, {
     kind: 'danger',
     json: made.json,
     fields,
     sourceChannelId: posted.channelId,
     sourceMessageId: posted.id,
   });
-  cards.flavorLater(posted, made.flavor, announced);
   if (winnerRsn) {
     const winner = await db.prepare('SELECT user_id FROM members WHERE guild_id = ? AND lower(rsn) = lower(?)').get(botw.guild_id, winnerRsn);
     if (winner) {

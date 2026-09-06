@@ -66,7 +66,7 @@ async function startNextQueuedSotw(guildId, client) {
           title: `${next.skill} SOTW`,
           description: theme.line('sotwOpen', next.skill),
         };
-        const announced = await cards.publish(client, guildId, {
+        await cards.publish(client, guildId, {
           kind: 'sotw',
           json: card,
           extraLines: [result.tracking],
@@ -74,7 +74,6 @@ async function startNextQueuedSotw(guildId, client) {
           sourceChannelId: posted.channelId,
           sourceMessageId: posted.id,
         });
-        if (result.flavor) cards.flavorLater(posted, result.flavor, announced);
       }
     } catch (err) {
       console.error('Failed to post queue auto-start announcement:', err.message);

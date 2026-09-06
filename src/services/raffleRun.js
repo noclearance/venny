@@ -78,9 +78,9 @@ async function postResult(client, raffle, { winner, entries, weightInfo, outcome
     theme.field('Entries', String(entries.length), true),
     !closed && weightInfo ? theme.field('Odds', weightInfo) : null,
   ];
-  const made = require('./cards').venny('raffle', {
+  const made = await require('./cards').make('raffle', {
     job: closed ? 'raffle_end' : 'raffle_win',
-    facts: { title: raffle.title, prize: loot || null, entries: entries.length, auto: true },
+    facts: { title: raffle.title, prize: loot || null, entries: entries.length, auto: true, seed: raffle.id },
     fallbackTitle: closed ? `${raffle.title} — closed` : `${raffle.title} — drawn`,
     fallbackDescription: outcome === 'close'
       ? 'No winner. The Enter button is dead.'
@@ -118,7 +118,6 @@ async function postResult(client, raffle, { winner, entries, weightInfo, outcome
     sourceMessageId: posted?.id,
     mention: winner ? `<@${winner.user_id}>` : undefined,
   });
-  if (posted) cards.flavorLater(posted, made.flavor, announced);
   return made;
 }
 

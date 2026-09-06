@@ -17,6 +17,7 @@ Generate a JSON object for a Discord embed with "title", "description", and "col
 color is an integer (0–16777215), not a hex string.
 Use vivid language and Discord markdown like **bold** or *italics*. Do not use emojis.
 Make every announcement sound like a legendary event is unfolding. Description is a short paragraph, not one line.
+Each card must be unique — a fresh title and rally line. Never reuse stock phrases such as "Skill's locked", "That's a wrap", "Get in", or "KC from this second counts".
 Do not invent ticket prices, guild-credit amounts, winners, RSNs, or exact timestamps that were not given.`;
 
 const PROMPTS = {
@@ -131,7 +132,7 @@ async function announceNow(job, details = {}, extra = {}) {
     return fallback;
   }
 
-  const request = (PROMPTS[job] || (() => `Clan announcement of type ${job}. Details: ${JSON.stringify(details)}`))(details);
+  const request = `${(PROMPTS[job] || (() => `Clan announcement of type ${job}. Details: ${JSON.stringify(details)}`))(details)}\nPost seed: ${details.seed || details.id || job}. Write a unique title for this post only.`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const started = Date.now();

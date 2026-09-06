@@ -48,14 +48,29 @@ async function createMass({
     ping_role_id: pingRoleId || null,
   };
 
+  const made = await require('./cards').make('event', {
+    job: 'event_start',
+    facts: { title: event.title, category: event.category || 'general', seed: event.id },
+    fallbackTitle: event.title,
+    fallbackDescription: theme.line('eventPosted', event.id),
+    extraLines: [event.description],
+    fields: [
+      theme.field('When', theme.when(event.event_time), true),
+      theme.field('Guild credits', economy.payNote('event_rsvp')),
+    ],
+  });
   const payload = {
-    embeds: [buildEventContent(event, await getAttendance(event.id))],
+    embeds: [buildEventContent(event, await getAttendance(event.id), {
+      title: made.json.title,
+      intro: made.json.description,
+      color: made.json.color,
+    })],
     components: [buildRsvpRow(event.id)],
   };
-  return { event, payload };
+  return { event, payload, made };
 }
 
-async function afterPosted(client, guildId, event, message, userId) {
+async function afterPosted(client, guildId, event, message, userId, made) {
   const db = getDb();
   await db.prepare('UPDATE events SET message_id = ?, message_channel_id = ? WHERE id = ?')
     .run(message.id, message.channelId, event.id);
@@ -65,9 +80,10 @@ async function afterPosted(client, guildId, event, message, userId) {
     mode: event.ping_mode,
     roleId: event.ping_role_id,
   });
-  const made = require('./cards').venny('event', {
+  const cards = require('./cards');
+  const card = made || await cards.make('event', {
     job: 'event_start',
-    facts: { title: event.title, category: event.category || 'general' },
+    facts: { title: event.title, category: event.category || 'general', seed: event.id },
     fallbackTitle: event.title,
     fallbackDescription: theme.line('eventPosted', event.id),
     extraLines: [event.description],
@@ -76,17 +92,15 @@ async function afterPosted(client, guildId, event, message, userId) {
       theme.field('Guild credits', economy.payNote('event_rsvp')),
     ],
   });
-  const cards = require('./cards');
-  const announced = await cards.publish(client, guildId, {
+  await cards.publish(client, guildId, {
     kind: 'event',
-    json: made.json,
+    json: card.json,
     extraLines: [event.description],
-    fields: made.flavor.fields,
+    fields: card.flavor.fields,
     sourceChannelId: message.channelId,
     sourceMessageId: message.id,
     mention: ping,
   });
-  cards.flavorLater(message, made.flavor, announced);
   const pingNote = event.ping_mode === 'everyone' ? ' ping @everyone' : (event.ping_role_id ? ' ping role' : '');
   await audit(client, guildId, `Event #${event.id} **${event.title}** created by <@${userId}>${pingNote}`);
 }
@@ -98,12 +112,15 @@ async function handleCreateModal(interaction) {
   if (!isModerator(interaction.member)) {
     return commandFail(interaction, 'Mods post masses.');
   }
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply();
+  }
   const title = interaction.fields.getTextInputValue('title');
   const about = interaction.fields.getTextInputValue('about');
   const when = interaction.fields.getTextInputValue('when');
   const parsed = await parseEventDate(when, interaction.guildId);
   if (!parsed.date) return commandFail(interaction, parsed.error);
-  const { event, payload } = await createMass({
+  const { event, payload, made } = await createMass({
     client: interaction.client,
     guildId: interaction.guildId,
     channel: interaction.channel,
@@ -112,9 +129,9 @@ async function handleCreateModal(interaction) {
     about,
     eventDate: parsed.date,
   });
-  await interaction.reply(payload);
+  await interaction.editReply(payload);
   const posted = await interaction.fetchReply();
-  await afterPosted(interaction.client, interaction.guildId, event, posted, interaction.user.id);
+  await afterPosted(interaction.client, interaction.guildId, event, posted, interaction.user.id, made);
 }
 
 module.exports = { createMass, afterPosted, handleCreateModal };
