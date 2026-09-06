@@ -229,10 +229,33 @@ check('mention create vs lookup', () => {
 
 const { safeReason, commandLabel } = require('../src/services/commandFail');
 check('commandFail hides secrets in error text', () => {
-  assert.strictEqual(safeReason('Could not parse date'), 'Could not parse date');
+  assert.match(safeReason('Could not parse date'), /logged it for staff/i);
   assert.match(safeReason('password leaked'), /staff/i);
   assert.strictEqual(commandLabel({ commandName: 'me', options: { getSubcommand: () => 'balance' } }), '/me balance');
   assert.strictEqual(commandLabel({ customId: 'rsvp:yes:12' }), 'button rsvp:yes:12');
+});
+
+check('commandFail maps technical failures to human copy', () => {
+  assert.match(
+    safeReason('for SELECT DISTINCT, ORDER BY expressions must appear in select list'),
+    /database/i,
+  );
+  assert.match(
+    safeReason('Wise Old Man request failed: ETIMEDOUT'),
+    /wise old man/i,
+  );
+  assert.match(
+    safeReason({ code: 50013, message: 'Missing Permissions' }),
+    /permission/i,
+  );
+  assert.match(
+    safeReason({ code: 10062, message: 'Unknown interaction' }),
+    /expired/i,
+  );
+  assert.match(
+    safeReason('TypeError: Cannot read properties of undefined'),
+    /logged it for staff/i,
+  );
 });
 
 check('award SQL qualifies coins for Postgres', () => {
