@@ -587,6 +587,12 @@ check('joinDescription skips duplicate notes', () => {
     assert.strictEqual(theme.bossArtUrl('nex').includes('Nex'), true);
   });
 
+  check('slash handler logs cmd and public followUp cannot throw the command', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src/events/interactionCreate.js'), 'utf8');
+    assert(src.includes('cmd ${label}'));
+    assert(src.includes('public followUp failed'));
+  });
+
   check('flavor uses SpaceXAI grok-4.5', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/flavor.js'), 'utf8');
     assert(src.includes('https://api.x.ai/v1/chat/completions'));

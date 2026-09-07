@@ -136,27 +136,41 @@ async function announceNow(job, details = {}, extra = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const started = Date.now();
+  const messages = [
+    { role: 'system', content: PERSONA },
+    { role: 'user', content: `${request}\n\nJSON Output:` },
+  ];
+  const baseBody = {
+    model: MODEL,
+    temperature: 0.9,
+    max_tokens: 280,
+    response_format: { type: 'json_object' },
+    messages,
+  };
 
   try {
-    const res = await fetch(API_URL, {
+    let res = await fetch(API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
       signal: controller.signal,
-      body: JSON.stringify({
-        model: MODEL,
-        reasoning_effort: 'low',
-        temperature: 0.9,
-        max_tokens: 280,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: PERSONA },
-          { role: 'user', content: `${request}\n\nJSON Output:` },
-        ],
-      }),
+      body: JSON.stringify({ ...baseBody, reasoning_effort: 'low' }),
     });
+    if (res.status === 400) {
+      const once = await res.text().catch(() => '');
+      console.warn(`SpaceXAI ${job}: HTTP 400 retry without reasoning_effort ${once.slice(0, 120)}`);
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify(baseBody),
+      });
+    }
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');

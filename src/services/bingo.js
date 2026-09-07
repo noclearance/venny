@@ -193,9 +193,10 @@ async function listTeams(bingoId) {
 
 async function completedSlots(bingoId) {
   const rows = await getDb().prepare(`
-    SELECT DISTINCT t.slot FROM bingo_progress p
+    SELECT t.slot FROM bingo_progress p
     JOIN bingo_tiles t ON t.id = p.tile_id
     WHERE p.bingo_id = ? AND p.status = 'complete'
+    GROUP BY t.slot
   `).all(bingoId);
   return new Set(rows.map(r => r.slot));
 }

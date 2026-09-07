@@ -36,9 +36,23 @@ function publicize(interaction) {
     if (keepPrivate) return origEdit(payload);
     if (!cleared) {
       cleared = true;
-      await origEdit({ content: 'Sent.' }).catch(() => {});
+      await origEdit({ content: 'Posted in channel.' }).catch(() => {});
     }
-    return interaction.followUp(payload);
+    try {
+      const msg = await interaction.followUp(payload);
+      if (msg && !msg.channelId && interaction.channelId) msg.channelId = interaction.channelId;
+      return msg;
+    } catch (err) {
+      console.warn(`public followUp failed: ${err.message}`);
+      await origEdit({
+        content: `Could not post publicly: ${String(err.message || err).slice(0, 400)}`,
+      }).catch(() => {});
+      return {
+        id: null,
+        channelId: interaction.channelId,
+        channel: interaction.channel,
+      };
+    }
   };
 }
 
@@ -68,19 +82,26 @@ module.exports = {
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
+      const t0 = Date.now();
+      const sub = interaction.options.getSubcommand(false);
+      const label = sub ? `/${interaction.commandName} ${sub}` : `/${interaction.commandName}`;
 
       try {
-        const sub = interaction.options.getSubcommand(false);
         const isPublic = Boolean(command.publicCommand || (sub && command.publicSubs?.includes(sub)));
         if (!interaction.deferred && !interaction.replied) {
           await interaction.deferReply({ flags: 64 });
         }
         shimReply(interaction);
-        if (!(await assertCommandAccess(interaction, command))) return;
+        if (!(await assertCommandAccess(interaction, command))) {
+          console.log(`cmd ${label} denied ${Date.now() - t0}ms`);
+          return;
+        }
         if (isPublic) publicize(interaction);
         if (interaction.guildId) await ensureGuildSettings(interaction.guildId);
         await command.execute(interaction);
+        console.log(`cmd ${label} ok ${Date.now() - t0}ms deferred=${interaction.deferred}`);
       } catch (err) {
+        console.warn(`cmd ${label} fail ${Date.now() - t0}ms code=${err.code || ''} ${err.message}`);
         logFail(`Command ${interaction.commandName}`, err);
         if (isGone(err)) return;
         await require('../services/commandFail').commandFail(interaction, err);

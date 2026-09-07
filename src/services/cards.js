@@ -61,17 +61,22 @@ function venny(kind, opts = {}) {
 }
 
 async function make(kind, opts = {}) {
-  const json = opts.job
-    ? await flavor.announce(opts.job, opts.facts || {}, {
-        fallbackTitle: opts.fallbackTitle,
-        fallbackDescription: opts.fallbackDescription,
-      })
-    : {
-        title: opts.fallbackTitle || '',
-        description: opts.fallbackDescription || '',
-        source: 'none',
-      };
-  return pack(kind, json, opts);
+  try {
+    const json = opts.job
+      ? await flavor.announce(opts.job, opts.facts || {}, {
+          fallbackTitle: opts.fallbackTitle,
+          fallbackDescription: opts.fallbackDescription,
+        })
+      : {
+          title: opts.fallbackTitle || '',
+          description: opts.fallbackDescription || '',
+          source: 'none',
+        };
+    return pack(kind, json, opts);
+  } catch (err) {
+    console.warn(`cards.make: ${err.message}`);
+    return venny(kind, opts);
+  }
 }
 
 async function flavorLater(message, spec, extras) {
