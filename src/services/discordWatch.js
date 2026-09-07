@@ -1,11 +1,14 @@
 const { Events } = require('discord.js');
 
-const GRACE_MS = 90_000;
-const RECONNECT_MS = 45_000;
+// Discord gateway 503s can last minutes. Killing the process in 45–90s
+// is what caused the Render restart storm (HTTP up, login never finished).
+const GRACE_MS = 10 * 60_000;
+const RECONNECT_MS = 5 * 60_000;
 const POLL_MS = 30_000;
 
 function watchDiscord(client) {
   client.bootAt = Date.now();
+  let lastReadyAt = 0;
   let reconnectTimer = null;
 
   function arm(why) {
@@ -24,9 +27,16 @@ function watchDiscord(client) {
     reconnectTimer = null;
   }
 
+  function markReady() {
+    lastReadyAt = Date.now();
+    clear();
+  }
+
   setInterval(() => {
     if (client.isReady()) return;
-    if (Date.now() - client.bootAt < GRACE_MS) return;
+    const now = Date.now();
+    if (now - client.bootAt < GRACE_MS) return;
+    if (lastReadyAt && now - lastReadyAt < RECONNECT_MS) return;
     console.error('HTTP is up but Discord is not. Exiting so Render restarts.');
     process.exit(1);
   }, POLL_MS).unref();
@@ -35,21 +45,21 @@ function watchDiscord(client) {
     console.error('Discord client error:', err.message);
   });
   client.on(Events.ShardError, (err, id) => {
-    console.error(`Discord shard ${id} error:`, err.message);
+    console.warn(`Discord shard ${id} error:`, err.message);
   });
   client.on(Events.ShardDisconnect, (event, id) => {
-    console.error(`Discord shard ${id} disconnected (${event?.code || '?'}).`);
+    console.warn(`Discord shard ${id} disconnected (${event?.code || '?'}). Waiting to resume.`);
     arm(`shard ${id} disconnect`);
   });
   client.on(Events.ShardResume, () => {
     console.log('Discord shard resumed.');
-    clear();
+    markReady();
   });
-  client.on(Events.ClientReady, clear);
+  client.on(Events.ClientReady, markReady);
   client.on(Events.Invalidated, () => {
     console.error('Discord session invalidated. Exiting so Render restarts.');
     process.exit(1);
   });
 }
 
-module.exports = { watchDiscord };
+module.exports = { watchDiscord, GRACE_MS, RECONNECT_MS };

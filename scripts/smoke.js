@@ -587,7 +587,13 @@ check('joinDescription skips duplicate notes', () => {
     assert.strictEqual(theme.bossArtUrl('nex').includes('Nex'), true);
   });
 
-  check('slash handler logs cmd and public followUp cannot throw the command', () => {
+  check('discord watchdog waits through gateway 503s', () => {
+  const watch = require('../src/services/discordWatch');
+  assert(watch.GRACE_MS >= 5 * 60_000, 'boot grace too short for Discord 503s');
+  assert(watch.RECONNECT_MS >= 3 * 60_000, 'reconnect window too short');
+});
+
+check('slash handler logs cmd and public followUp cannot throw the command', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'src/events/interactionCreate.js'), 'utf8');
     assert(src.includes('cmd ${label}'));
     assert(src.includes('public followUp failed'));

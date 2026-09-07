@@ -39,7 +39,8 @@ function startServer(client) {
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'GET' && (url === '/' || url === '/health')) {
       const ready = Boolean(client?.isReady?.());
-      const starting = Date.now() - (client.bootAt || Date.now()) < 60_000;
+      const { GRACE_MS } = require('./discordWatch');
+      const starting = Date.now() - (client.bootAt || Date.now()) < GRACE_MS;
       if (!ready && !starting) {
         res.writeHead(503, { 'Content-Type': 'text/plain' }).end('discord offline');
         return;
