@@ -620,6 +620,7 @@ check('slash handler logs cmd and public followUp cannot throw the command', () 
     const src = fs.readFileSync(path.join(__dirname, '..', 'src/events/interactionCreate.js'), 'utf8');
     assert(src.includes('cmd ${label}'));
     assert(src.includes('public followUp failed'));
+    assert(src.includes('function sanitizeEditReply'));
   });
 
   check('flavor uses SpaceXAI grok-4.5', () => {
