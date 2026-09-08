@@ -24,6 +24,18 @@ function shimReply(interaction) {
   };
 }
 
+function sanitizeEditReply(interaction) {
+  const origEdit = interaction.editReply.bind(interaction);
+  interaction.editReply = options => {
+    const payload = typeof options === 'string' ? { content: options } : { ...options };
+    // editReply cannot toggle ephemerality; drop reply-only flags from legacy command code.
+    delete payload.flags;
+    delete payload.ephemeral;
+    delete payload.fetchReply;
+    return origEdit(payload);
+  };
+}
+
 function publicize(interaction) {
   const origEdit = interaction.editReply.bind(interaction);
   let cleared = false;
@@ -92,6 +104,7 @@ module.exports = {
           await interaction.deferReply({ flags: 64 });
         }
         shimReply(interaction);
+        sanitizeEditReply(interaction);
         if (!(await assertCommandAccess(interaction, command))) {
           console.log(`cmd ${label} denied ${Date.now() - t0}ms`);
           return;
