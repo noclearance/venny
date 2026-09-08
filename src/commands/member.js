@@ -90,7 +90,33 @@ module.exports = {
           embed.addFields({ name: 'Top Skills', value: skillList });
         }
 
+        const activeSotw = await db.prepare('SELECT * FROM sotw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+        const activeBotw = await db.prepare('SELECT * FROM botw WHERE guild_id = ? AND ended = 0 ORDER BY id DESC').get(interaction.guildId);
+        const settings = await db.prepare('SELECT reminder_channel FROM guild_settings WHERE guild_id = ?').get(interaction.guildId);
+        const { prettyMetric } = require('../osrs/catalog');
+
+        const liveSummary = [];
+        if (activeSotw) {
+          const endTs = Math.floor(new Date(activeSotw.ends_at).getTime() / 1000);
+          liveSummary.push(`SOTW ${wom.getSkillEmoji(activeSotw.skill)} **${activeSotw.skill.toUpperCase()}** (ends <t:${endTs}:R>)`);
+        }
+        if (activeBotw) {
+          liveSummary.push(`BOTW **${prettyMetric(activeBotw.boss)}** (ends ${theme.when(activeBotw.ends_at)})`);
+        }
+        const eventsPointer = settings?.reminder_channel
+          ? `<#${settings.reminder_channel}>`
+          : '#🎯・events (events channel)';
+
+        const checklist = [
+          '**Quick setup checklist**',
+          '1. You’re linked ✅',
+          '2. `/subscribe add` for **SOTW** and **BOTW**',
+          `3. What’s live: ${liveSummary.length ? liveSummary.join(' · ') : `No active SOTW/BOTW right now — check ${eventsPointer}.`}`,
+          '4. Optional: `/clan info` for the full board',
+        ].join('\n');
+
         await interaction.editReply({ embeds: [embed] });
+        await interaction.followUp({ content: checklist, flags: 64 });
         require('../services/ranks').maybePromote(interaction.client, interaction.guildId, interaction.user.id);
       } catch (err) {
         await interaction.editReply(`❌ Could not find player "${rsn}" on Wise Old Man. Make sure the name is spelled correctly, and that the player has been looked up on wiseoldman.net at least once.`);
