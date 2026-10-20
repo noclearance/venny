@@ -5,6 +5,7 @@
 const { getDb } = require('../db/database');
 const theme = require('./theme');
 const ranks = require('./ranks');
+const aisBot = require('./aisBot');
 
 const DEFAULT_CORS = [
   'https://misclickerz.ai.studio',
@@ -197,16 +198,19 @@ function clanRanks() {
 }
 
 async function status(client) {
+  const hub = aisBot.resolveBaseUrlState();
   return {
     ok: Boolean(client?.isReady?.()),
     discord: Boolean(client?.isReady?.()),
     xai: Boolean((process.env.XAI_API_KEY || '').trim()),
     openai: false,
     postgres: Boolean((process.env.DATABASE_URL || '').trim()),
-    // Outbound hub ingest (aisBot): gated on BOT_SECRET; AIS_BOT_URL optional (has default).
+    // Outbound hub ingest (aisBot): requires both BOT_SECRET and a safe resolved hub URL.
     hub: {
-      configured: Boolean((process.env.BOT_SECRET || '').trim()),
+      configured: Boolean((process.env.BOT_SECRET || '').trim()) && hub.url_ok,
       url_set: Boolean((process.env.AIS_BOT_URL || '').trim()),
+      url_ok: hub.url_ok,
+      host: hub.host || null,
     },
     uptime_s: Math.round(process.uptime()),
   };
