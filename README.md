@@ -59,6 +59,14 @@ WOM_GROUP_ID=your_wom_group_id
 WOM_VERIFICATION_CODE=your_code   # Optional, needed for SOTW auto-creation
 ```
 
+If you use outbound hub ingest (`/api/bot/webhook`), also set:
+```bash
+BOT_SECRET=shared_secret_from_hub
+# Optional override; defaults to https://misclickerz-hub.onrender.com/api/bot
+AIS_BOT_URL=https://misclickerz-hub.onrender.com
+```
+`AIS_BOT_URL` must be HTTPS in production. Local HTTP is only allowed for `localhost` / `127.0.0.1`.
+
 ### 6. Initialize the Database
 
 ```bash

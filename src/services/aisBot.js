@@ -1,6 +1,8 @@
 // Outbound hub ingest. No-op without BOT_SECRET. Never throws into Discord commands.
 
-const DEFAULT_BASE = 'https://misclickerz.ai.studio/api/bot';
+const DEFAULT_BASE = 'https://misclickerz-hub.onrender.com/api/bot';
+const LEGACY_HOST = 'misclickerz.ai.studio';
+const LOCAL_HTTP_HOSTS = new Set(['localhost', '127.0.0.1']);
 const TIMEOUT_MS = 8000;
 const MAX_BODY = 80_000;
 
@@ -76,9 +78,37 @@ function typeFromJob(kind, job) {
 }
 
 function baseUrl() {
-  let url = (process.env.AIS_BOT_URL || DEFAULT_BASE).replace(/\/+$/, '');
+  let url = String(process.env.AIS_BOT_URL || DEFAULT_BASE).trim().replace(/\/+$/, '');
+  if (!url) return '';
   if (!/\/api\/bot$/i.test(url)) url = `${url}/api/bot`;
   return url;
+}
+
+function resolveBaseUrlState() {
+  const url = baseUrl();
+  if (!url) {
+    return { url: '', host: '', url_ok: false, reason: 'hub URL is empty' };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { url, host: '', url_ok: false, reason: 'hub URL is not parseable' };
+  }
+
+  const host = String(parsed.hostname || '').toLowerCase();
+  if (host === LEGACY_HOST) {
+    return { url, host, url_ok: false, reason: `legacy host ${LEGACY_HOST} is blocked` };
+  }
+
+  const https = parsed.protocol === 'https:';
+  const localHttp = parsed.protocol === 'http:' && LOCAL_HTTP_HOSTS.has(host);
+  if (!https && !localHttp) {
+    return { url, host, url_ok: false, reason: 'hub URL must use https (http allowed only for localhost/127.0.0.1)' };
+  }
+
+  return { url, host, url_ok: true, reason: '' };
 }
 
 function secret() {
@@ -91,6 +121,13 @@ function warnIfOff() {
   if (warnedOff) return;
   warnedOff = true;
   console.warn('Hub ingest off — set BOT_SECRET on Render');
+}
+
+let warnedBadUrl = false;
+function warnIfBadUrl(reason) {
+  if (warnedBadUrl) return;
+  warnedBadUrl = true;
+  console.warn(`Hub ingest off — invalid AIS_BOT_URL (${reason})`);
 }
 
 const SECRET_KEY = /discord_token|bot_token|wom_verif|verification_code|openai|gemini|xai_api|api_token|bot_secret|api_key/i;
@@ -122,6 +159,12 @@ async function post(path, payload) {
     return { skipped: true, reason: 'no BOT_SECRET' };
   }
 
+  const hub = resolveBaseUrlState();
+  if (!hub.url_ok) {
+    warnIfBadUrl(hub.reason);
+    return { skipped: true, reason: hub.reason };
+  }
+
   let body;
   try {
     body = validatePayload(stripSecrets(payload));
@@ -132,7 +175,7 @@ async function post(path, payload) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const url = `${baseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = `${hub.url}${path.startsWith('/') ? path : `/${path}`}`;
 
   try {
     const res = await fetch(url, {
@@ -198,6 +241,7 @@ module.exports = {
   ingestIncoming,
   classifyHook,
   baseUrl,
+  resolveBaseUrlState,
   warnIfOff,
   ascii,
   pack,

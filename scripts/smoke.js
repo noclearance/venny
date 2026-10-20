@@ -9,6 +9,12 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number);
+if (NODE_MAJOR < 22 || (NODE_MAJOR === 22 && NODE_MINOR < 13)) {
+  console.error(`smoke.js requires Node >= 22.13.0, got ${process.versions.node}`);
+  process.exit(1);
+}
+
 const failures = [];
 function check(name, fn) {
   try {
@@ -18,6 +24,11 @@ function check(name, fn) {
     failures.push(`${name}: ${err.message}`);
     console.error(`FAIL  ${name}: ${err.message}`);
   }
+}
+
+function restoreEnv(name, value) {
+  if (value == null) delete process.env[name];
+  else process.env[name] = value;
 }
 
 async function checkAsync(name, fn) {
@@ -366,7 +377,16 @@ check('sotw start uses one WOM attach path', () => {
 const { joinDescription, make } = require('../src/services/cards');
 check('hub ingest uses X-Venny-Secret and /api/bot/webhook', () => {
   const hub = require('../src/services/aisBot');
-  assert.strictEqual(hub.baseUrl(), 'https://misclickerz.ai.studio/api/bot');
+  const prevUrl = process.env.AIS_BOT_URL;
+  delete process.env.AIS_BOT_URL;
+  try {
+    assert.strictEqual(hub.baseUrl(), 'https://misclickerz-hub.onrender.com/api/bot');
+    const state = hub.resolveBaseUrlState();
+    assert.strictEqual(state.url_ok, true);
+    assert.strictEqual(state.host, 'misclickerz-hub.onrender.com');
+  } finally {
+    restoreEnv('AIS_BOT_URL', prevUrl);
+  }
   assert.strictEqual(hub.ROUTES.drop, '/webhook');
   assert.strictEqual(hub.ROUTES.misclick, '/webhook');
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/aisBot.js'), 'utf8');
@@ -397,6 +417,8 @@ check('clan now and ranks payloads', () => {
   assert(src.includes("/api/clan/now"));
   assert(src.includes("/api/clan/members"));
   assert(src.includes("/api/clan/ranks"));
+  assert(src.includes('url_ok'));
+  assert(src.includes('host'));
 });
 
 check('sync-rank Bearer is not the Discord token', () => {
@@ -421,6 +443,80 @@ check('joinDescription skips duplicate notes', () => {
 });
 
 (async () => {
+  await checkAsync('hub ingest refuses legacy host without sending fetch', async () => {
+    const hub = require('../src/services/aisBot');
+    const prevUrl = process.env.AIS_BOT_URL;
+    const prevSecret = process.env.BOT_SECRET;
+    const prevFetch = global.fetch;
+    process.env.AIS_BOT_URL = 'https://misclickerz.ai.studio';
+    process.env.BOT_SECRET = 'smoke-secret';
+    let calls = 0;
+    global.fetch = async () => {
+      calls += 1;
+      return { ok: true, status: 200, text: async () => '' };
+    };
+    try {
+      const out = await hub.post('/webhook', { type: 'webhook', title: 'legacy-host-check' });
+      assert.strictEqual(out.skipped, true);
+      assert.match(String(out.reason), /legacy host/i);
+      assert.strictEqual(calls, 0);
+    } finally {
+      global.fetch = prevFetch;
+      restoreEnv('AIS_BOT_URL', prevUrl);
+      restoreEnv('BOT_SECRET', prevSecret);
+    }
+  });
+
+  await checkAsync('hub ingest refuses non-https URL without sending fetch', async () => {
+    const hub = require('../src/services/aisBot');
+    const prevUrl = process.env.AIS_BOT_URL;
+    const prevSecret = process.env.BOT_SECRET;
+    const prevFetch = global.fetch;
+    process.env.AIS_BOT_URL = 'http://example.com';
+    process.env.BOT_SECRET = 'smoke-secret';
+    let calls = 0;
+    global.fetch = async () => {
+      calls += 1;
+      return { ok: true, status: 200, text: async () => '' };
+    };
+    try {
+      const out = await hub.post('/webhook', { type: 'webhook', title: 'http-check' });
+      assert.strictEqual(out.skipped, true);
+      assert.match(String(out.reason), /https/i);
+      assert.strictEqual(calls, 0);
+    } finally {
+      global.fetch = prevFetch;
+      restoreEnv('AIS_BOT_URL', prevUrl);
+      restoreEnv('BOT_SECRET', prevSecret);
+    }
+  });
+
+  await checkAsync('hub ingest uses valid AIS_BOT_URL override', async () => {
+    const hub = require('../src/services/aisBot');
+    const prevUrl = process.env.AIS_BOT_URL;
+    const prevSecret = process.env.BOT_SECRET;
+    const prevFetch = global.fetch;
+    process.env.AIS_BOT_URL = 'https://example.com/hub';
+    process.env.BOT_SECRET = 'smoke-secret';
+    const seen = [];
+    global.fetch = async (url, opts) => {
+      seen.push({ url, opts });
+      return { ok: true, status: 200, text: async () => '' };
+    };
+    try {
+      const out = await hub.post('webhook', { type: 'webhook', title: 'override-check' });
+      assert.strictEqual(out.ok, true);
+      assert.strictEqual(out.status, 200);
+      assert.strictEqual(seen.length, 1);
+      assert.strictEqual(seen[0].url, 'https://example.com/hub/api/bot/webhook');
+      assert.strictEqual(seen[0].opts.headers['X-Venny-Secret'], 'smoke-secret');
+    } finally {
+      global.fetch = prevFetch;
+      restoreEnv('AIS_BOT_URL', prevUrl);
+      restoreEnv('BOT_SECRET', prevSecret);
+    }
+  });
+
   await checkAsync('stale configured channel clears exact slot and does not drift', async () => {
     const { resolveConfiguredChannel } = require('../src/services/channelRouting');
     const stale = new Error('Unknown Channel');
